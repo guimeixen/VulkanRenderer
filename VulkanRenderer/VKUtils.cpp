@@ -81,4 +81,42 @@ namespace vkutils
 		if (func != nullptr)
 			func(instance, callback, pAllocator);
 	}
+
+	VkPhysicalDevice ChoosePhysicalDevice(const std::vector<VkPhysicalDevice>& physicalDevices)
+	{
+		// Try to find a discrete GPU
+
+		VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
+
+		for (const VkPhysicalDevice &pd : physicalDevices)
+		{
+			VkPhysicalDeviceProperties deviceProperties;
+			vkGetPhysicalDeviceProperties(pd, &deviceProperties);
+
+			if (deviceProperties.deviceType == VkPhysicalDeviceType::VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+			{
+				physicalDevice = pd;
+				break;
+			}
+		}
+
+		// If we don't have a discrete GPU, try to find a integrated GPU
+
+		if (physicalDevice == VK_NULL_HANDLE)
+		{
+			for (const VkPhysicalDevice& pd : physicalDevices)
+			{
+				VkPhysicalDeviceProperties deviceProperties;
+				vkGetPhysicalDeviceProperties(pd, &deviceProperties);
+
+				if (deviceProperties.deviceType == VkPhysicalDeviceType::VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+				{
+					physicalDevice = pd;
+					break;
+				}
+			}
+		}
+
+		return physicalDevice;
+	}
 }

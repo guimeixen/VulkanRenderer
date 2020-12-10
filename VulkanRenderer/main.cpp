@@ -11,6 +11,9 @@ int main()
 
 	VkInstance instance;
 	VkDebugReportCallbackEXT debugCallback;
+	VkSurfaceKHR surface;
+	VkPhysicalDevice physicalDevice;
+	VkDevice device;
 
 	if (glfwInit() != GLFW_TRUE)
 	{
@@ -80,12 +83,49 @@ int main()
 		std::cout << "Created debug report callback\n";
 	}
 
-	
+	if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create window surface\n";
+		return 1;
+	}
+	std::cout << "Created window surface\n";
+
+	uint32_t deviceCount = 0;
+	vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
+
+	if (deviceCount == 0)
+	{
+		std::cout << "Failed to find GPUs with Vulkan support\n";
+		return 1;
+	}
+
+	std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
+	vkEnumeratePhysicalDevices(instance, &deviceCount, physicalDevices.data());
+
+	physicalDevice = vkutils::ChoosePhysicalDevice(physicalDevices);
+
+	if (physicalDevice == VK_NULL_HANDLE)
+	{
+		std::cout << "Failed to find suitable physical device\n";
+		return 1;
+	}
+
+	VkPhysicalDeviceFeatures deviceFeatures;
+	VkPhysicalDeviceProperties deviceProperties;
+	VkPhysicalDeviceMemoryProperties deviceMemoryProperties;
+
+	vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
+	vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &deviceMemoryProperties);
+
+	std::cout << "GPU: " << deviceProperties.deviceName << '\n';
 
 	while (!glfwWindowShouldClose(window))
 	{
 		glfwPollEvents();
 	}
+
+	vkDestroySurfaceKHR(instance, surface, nullptr);
 
 	if (enableValidationLayers)
 		vkutils::DestroyDebugReportCallbackEXT(instance, debugCallback, nullptr);
