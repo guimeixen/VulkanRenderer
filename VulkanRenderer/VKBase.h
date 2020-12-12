@@ -9,7 +9,7 @@ class VKBase
 public:
 	VKBase();
 
-	bool Init(GLFWwindow *window, bool enableValidationLayers);
+	bool Init(GLFWwindow *window, unsigned int width, unsigned int height, bool enableValidationLayers);
 	void Dispose();
 
 	VkInstance GetInstance() const { return instance; }
@@ -18,6 +18,12 @@ public:
 	VkSurfaceKHR GetSurface() const { return surface; }
 	VkQueue GetPresentQueue() const { return graphicsQueue; }
 	VkQueue GetGraphicsQueue() const { return graphicsQueue; }
+	VkSwapchainKHR GetSwapchain() const { return swapchain; }
+
+	VkExtent2D GetSurfaceExtent() const { return surfaceExtent; }
+	VkSurfaceFormatKHR GetSurfaceFormat() const { return surfaceFormat; }
+	const std::vector<VkImageView> GetSwapchainImageViews() const { return swapChainImageViews; }
+	uint32_t GetSwapchainImageCount() const { return static_cast<uint32_t>(swapChainImages.size()); }
 
 private:
 	bool CreateInstance();
@@ -25,6 +31,7 @@ private:
 	bool CreateSurface(GLFWwindow *window);
 	bool ChoosePhysicalDevice();
 	bool CreateDevice(VkSurfaceKHR surface);
+	bool CreateSwapchain(unsigned int width, unsigned int height);
 
 private:
 	bool enableValidationLayers;
@@ -43,5 +50,9 @@ private:
 	VkQueue presentQueue;
 	VkQueue computeQueue;
 	VkSurfaceKHR surface;
-	
+	VkSurfaceFormatKHR surfaceFormat;
+	VkExtent2D surfaceExtent;
+	VkSwapchainKHR swapchain;
+	std::vector<VkImage> swapChainImages;
+	std::vector<VkImageView> swapChainImageViews;
 };

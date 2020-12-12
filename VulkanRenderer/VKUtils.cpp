@@ -278,4 +278,15 @@ namespace vkutils
 			return actualExtent;
 		}
 	}
+
+	uint32_t FindMemoryType(const VkPhysicalDeviceMemoryProperties &memProps, uint32_t typeFilter, VkMemoryPropertyFlags properties)
+	{
+		for (uint32_t i = 0; i < memProps.memoryTypeCount; i++)
+		{
+			if (typeFilter & (1 << i) && (memProps.memoryTypes[i].propertyFlags & properties) == properties)
+				return i;
+		}
+
+		return 0;
+	}
 }
