@@ -1,7 +1,4 @@
-#include "VKUtils.h"
-
-#include "GLFW/glfw3.h"
-
+#include "VKBase.h"
 #include "VKShader.h"
 
 #include <iostream>
@@ -11,27 +8,12 @@
 
 int main()
 {
-	bool enableValidationLayers = true;
-	bool showAvailableExtensions = false;
-	bool showMemoryProperties = false;
-	const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" };
-	const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 	const int MAX_FRAMES_IN_FLIGHT = 2;
 	const uint32_t width = 640;
 	const uint32_t height = 480;
 
-	VkInstance instance;
-	VkDebugReportCallbackEXT debugCallback;
-	VkSurfaceKHR surface;
 	VkSurfaceFormatKHR surfaceFormat;
 	VkExtent2D surfaceExtent;
-	VkPhysicalDevice physicalDevice;
-	VkDevice device;
-	vkutils::QueueFamilyIndices queueIndices;
-	VkQueue graphicsQueue;
-	VkQueue transferQueue;
-	VkQueue presentQueue;
-	VkQueue computeQueue;
 	VkCommandPool cmdPool;
 	VkSwapchainKHR swapChain;
 	std::vector<VkImage> swapChainImages;
@@ -58,180 +40,16 @@ int main()
 
 	glfwSetWindowPos(window, 400, 100);
 
-	if (enableValidationLayers && !vkutils::ValidationLayersSupported(validationLayers))
+	VKBase base;
+	if (!base.Init(window, true))
 	{
-		std::cout << "Validation layers were requested, but are not available!\n";
 		glfwTerminate();
 		return 1;
 	}
 
-	VkApplicationInfo appInfo = {};
-	appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-	appInfo.pApplicationName = "VulkanRenderer";
-	appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-	appInfo.pEngineName = "Engine";
-	appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
-	appInfo.apiVersion = VK_API_VERSION_1_0;
+	VkDevice device = base.GetDevice();
 
-	const std::vector<const char*> requiredExtentions = vkutils::GetRequiredExtensions(enableValidationLayers);
-
-	VkInstanceCreateInfo instanceInfo = {};
-	instanceInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-	instanceInfo.pApplicationInfo = &appInfo;
-	instanceInfo.enabledExtensionCount = static_cast<uint32_t>(requiredExtentions.size());
-	instanceInfo.ppEnabledExtensionNames = requiredExtentions.data();
-
-	if (enableValidationLayers)
-	{
-		instanceInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-		instanceInfo.ppEnabledLayerNames = validationLayers.data();
-	}
-	else
-	{
-		instanceInfo.enabledLayerCount = 0;
-	}
-
-	if (vkCreateInstance(&instanceInfo, nullptr, &instance) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create Vulkan Instance!\n";
-		return 1;
-	}
-	
-	std::cout << "Created Vulkan Instance\n";
-
-	if (enableValidationLayers)
-	{
-		VkDebugReportCallbackCreateInfoEXT callbackInfo = {};
-		callbackInfo.sType = VK_STRUCTURE_TYPE_DEBUG_REPORT_CALLBACK_CREATE_INFO_EXT;
-		callbackInfo.flags = VK_DEBUG_REPORT_ERROR_BIT_EXT | VK_DEBUG_REPORT_WARNING_BIT_EXT | VK_DEBUG_REPORT_PERFORMANCE_WARNING_BIT_EXT;
-		callbackInfo.pfnCallback = vkutils::DebugCallback;
-
-		if (vkutils::CreateDebugReportCallbackEXT(instance, &callbackInfo, nullptr, &debugCallback) != VK_SUCCESS)
-		{
-			std::cout << "Failed to create debug report callback!\n";
-			return 1;
-		}
-		std::cout << "Created debug report callback\n";
-	}
-
-	if (glfwCreateWindowSurface(instance, window, nullptr, &surface) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create window surface\n";
-		return 1;
-	}
-	std::cout << "Created window surface\n";
-
-	uint32_t deviceCount = 0;
-	vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
-
-	if (deviceCount == 0)
-	{
-		std::cout << "Failed to find GPUs with Vulkan support\n";
-		return 1;
-	}
-
-	std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
-	vkEnumeratePhysicalDevices(instance, &deviceCount, physicalDevices.data());
-
-	physicalDevice = vkutils::ChoosePhysicalDevice(physicalDevices);
-
-	if (physicalDevice == VK_NULL_HANDLE)
-	{
-		std::cout << "Failed to find suitable physical device\n";
-		return 1;
-	}
-
-	VkPhysicalDeviceFeatures deviceFeatures;
-	VkPhysicalDeviceProperties deviceProperties;
-	VkPhysicalDeviceMemoryProperties deviceMemoryProperties;
-
-	vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
-	vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
-	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &deviceMemoryProperties);
-
-	std::cout << "GPU: " << deviceProperties.deviceName << '\n';
-	std::cout << "Max allocations: " << deviceProperties.limits.maxMemoryAllocationCount << '\n';
-	std::cout << "Memory heaps: " << deviceMemoryProperties.memoryHeapCount << '\n';
-	std::cout << "Max push constant size: " << deviceProperties.limits.maxPushConstantsSize << '\n';
-
-	if (showMemoryProperties)
-	{
-		for (uint32_t i = 0; i < deviceMemoryProperties.memoryHeapCount; i++)
-		{
-			if (deviceMemoryProperties.memoryHeaps[i].flags == VkMemoryHeapFlagBits::VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
-				std::cout << "\tSize: " << (deviceMemoryProperties.memoryHeaps[i].size >> 20) << " mib - Device Local\n";
-			else
-				std::cout << "\tSize: " << (deviceMemoryProperties.memoryHeaps[i].size >> 20) << " mib\n";
-		}
-
-		std::cout << "Memory types: " << deviceMemoryProperties.memoryTypeCount << '\n';
-
-		std::string str;
-		for (uint32_t i = 0; i < deviceMemoryProperties.memoryTypeCount; i++)
-		{
-			if ((deviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
-				str += "Device local, ";
-			if ((deviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
-				str += "Host visible, ";
-			if ((deviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
-				str += "Host coherent, ";
-			if ((deviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) == VK_MEMORY_PROPERTY_HOST_CACHED_BIT)
-				str += "Host cached, ";
-
-			std::cout << "\tHeap index: " << deviceMemoryProperties.memoryTypes[i].heapIndex << " - Property Flags: " << str << '\n';
-			str.clear();
-		}
-	}
-	
-	queueIndices = vkutils::FindQueueFamilies(physicalDevice, surface);
-
-	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-	std::set<int> uniqueQueueFamilies = { queueIndices.graphicsFamily, queueIndices.presentFamily, queueIndices.transferFamily };		// If the graphics family and the present family are the same, which is likely
-
-	float queuePriority = 1.0f;
-
-	for (int queueFamilyIndex : uniqueQueueFamilies)
-	{
-		VkDeviceQueueCreateInfo queueCreateInfo = {};
-		queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
-		queueCreateInfo.queueFamilyIndex = queueFamilyIndex;
-		queueCreateInfo.queueCount = 1;
-		queueCreateInfo.pQueuePriorities = &queuePriority;
-
-		queueCreateInfos.push_back(queueCreateInfo);
-	}
-
-	VkPhysicalDeviceFeatures deviceFeaturesToEnable = {};
-
-	VkDeviceCreateInfo deviceInfo = {};
-	deviceInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-	deviceInfo.pQueueCreateInfos = queueCreateInfos.data();
-	deviceInfo.queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size());
-	deviceInfo.pEnabledFeatures = &deviceFeaturesToEnable;
-	deviceInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
-	deviceInfo.ppEnabledExtensionNames = deviceExtensions.data();
-
-	if (enableValidationLayers)
-	{
-		deviceInfo.enabledLayerCount = static_cast<uint32_t>(validationLayers.size());
-		deviceInfo.ppEnabledLayerNames = validationLayers.data();
-	}
-	else
-	{
-		deviceInfo.enabledLayerCount = 0;
-	}
-
-	if (vkCreateDevice(physicalDevice, &deviceInfo, nullptr, &device) != VK_NULL_HANDLE)
-	{
-		std::cout << "Failed to create Device\n";
-		return 1;
-	}
-	std::cout << "Created Device\n";
-
-	vkGetDeviceQueue(device, queueIndices.graphicsFamily, 0, &graphicsQueue);
-	vkGetDeviceQueue(device, queueIndices.presentFamily, 0, &presentQueue);
-	vkGetDeviceQueue(device, queueIndices.transferFamily, 0, &transferQueue);
-	vkGetDeviceQueue(device, queueIndices.computeFamily, 0, &computeQueue);
+	vkutils::QueueFamilyIndices queueIndices = vkutils::FindQueueFamilies(base.GetPhysicalDevice(), base.GetSurface());
 
 	VkCommandPoolCreateInfo cmdPoolCreateInfo = {};
 	cmdPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -245,22 +63,7 @@ int main()
 	}
 	std::cout << "Command pool created\n";
 
-	if (showAvailableExtensions)
-	{
-		uint32_t extensionCount = 0;
-		vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-
-		std::vector<VkExtensionProperties> extensions(extensionCount);
-		vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
-
-		std::cout << "Available Extensions:\n";
-		for (const auto& extension : extensions)
-		{
-			std::cout << '\t' << extension.extensionName << '\n';
-		}
-	}
-
-	vkutils::SwapChainSupportDetails swapChainSupport = vkutils::QuerySwapChainSupport(physicalDevice, surface);
+	vkutils::SwapChainSupportDetails swapChainSupport = vkutils::QuerySwapChainSupport(base.GetPhysicalDevice(), base.GetSurface());
 
 	surfaceFormat = vkutils::ChooseSwapChainSurfaceFormat(swapChainSupport.formats);
 	VkPresentModeKHR presentMode = vkutils::ChooseSwapChainPresentMode(swapChainSupport.presentModes);
@@ -276,7 +79,7 @@ int main()
 
 	VkSwapchainCreateInfoKHR swapChainInfo = {};
 	swapChainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
-	swapChainInfo.surface = surface;
+	swapChainInfo.surface = base.GetSurface();
 	swapChainInfo.minImageCount = imageCount;
 	swapChainInfo.imageFormat = surfaceFormat.format;
 	swapChainInfo.imageColorSpace = surfaceFormat.colorSpace;
@@ -620,6 +423,9 @@ int main()
 		}
 	}
 
+	VkQueue graphicsQueue = base.GetGraphicsQueue();
+	VkQueue presentQueue = base.GetPresentQueue();
+
 	while (!glfwWindowShouldClose(window))
 	{
 		glfwPollEvents();
@@ -703,13 +509,8 @@ int main()
 	vkDestroyRenderPass(device, renderPass, nullptr);
 	vkDestroySwapchainKHR(device, swapChain, nullptr);
 	vkDestroyCommandPool(device, cmdPool, nullptr);
-	vkDestroyDevice(device, nullptr);
-	vkDestroySurfaceKHR(instance, surface, nullptr);
 
-	if (enableValidationLayers)
-		vkutils::DestroyDebugReportCallbackEXT(instance, debugCallback, nullptr);
-
-	vkDestroyInstance(instance, nullptr);
+	base.Dispose();
 
 	glfwTerminate();
 

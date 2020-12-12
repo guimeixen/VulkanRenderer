@@ -6,6 +6,10 @@
 
 VKShader::VKShader()
 {
+    vertexModule = VK_NULL_HANDLE;
+    fragmentModule = VK_NULL_HANDLE;
+    vertexStageInfo = {};
+    fragmentStageInfo = {};
 }
 
 void VKShader::LoadShader(VkDevice device, const std::string &vertexPath, const std::string &fragmentPath)

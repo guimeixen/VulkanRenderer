@@ -143,10 +143,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="VKBase.cpp" />
     <ClCompile Include="VKShader.cpp" />
     <ClCompile Include="VKUtils.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="VKBase.h" />
     <ClInclude Include="VKShader.h" />
     <ClInclude Include="VKUtils.h" />
   </ItemGroup>
