@@ -49,11 +49,11 @@ int main()
 
 	VkDevice device = base.GetDevice();
 
-	vkutils::QueueFamilyIndices queueIndices = vkutils::FindQueueFamilies(base.GetPhysicalDevice(), base.GetSurface());
+	vkutils::QueueFamilyIndices queueIndices = vkutils::FindQueueFamilies(base.GetPhysicalDevice(), base.GetSurface(), false, false);
 
 	VkCommandPoolCreateInfo cmdPoolCreateInfo = {};
 	cmdPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	cmdPoolCreateInfo.queueFamilyIndex = queueIndices.graphicsFamily;
+	cmdPoolCreateInfo.queueFamilyIndex = queueIndices.graphicsFamilyIndex;
 	cmdPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;			// Command buffers can be rerecorded. Possible flags are VK_COMMAND_POOL_CREATE_TRANSIENT_BIT and VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT
 
 	if (vkCreateCommandPool(device, &cmdPoolCreateInfo, nullptr, &cmdPool) != VK_SUCCESS)
@@ -92,9 +92,9 @@ int main()
 	swapChainInfo.clipped = VK_TRUE;		// If true then we don't care about the color of pixels that are obscured, eg. because another window is in front of them. Best performance with it enabled
 	swapChainInfo.oldSwapchain = VK_NULL_HANDLE;
 
-	uint32_t queueFamilyIndices[] = { (uint32_t)queueIndices.graphicsFamily, (uint32_t)queueIndices.presentFamily };
+	uint32_t queueFamilyIndices[] = { (uint32_t)queueIndices.graphicsFamilyIndex, (uint32_t)queueIndices.presentFamilyIndex };
 
-	if (queueIndices.graphicsFamily != queueIndices.presentFamily)
+	if (queueIndices.graphicsFamilyIndex != queueIndices.presentFamilyIndex)
 	{
 		swapChainInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 		swapChainInfo.queueFamilyIndexCount = 2;

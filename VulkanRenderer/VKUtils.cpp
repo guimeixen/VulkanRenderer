@@ -120,7 +120,7 @@ namespace vkutils
 		return physicalDevice;
 	}
 
-	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface)
+	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface, bool tryFindTransferOnlyQueue, bool tryFindComputeOnlyQueue)
 	{
 		QueueFamilyIndices indices;
 
@@ -132,47 +132,57 @@ namespace vkutils
 
 		std::cout << "Queue families count: " << queueFamilyCount << '\n';
 
-		int i = 0;
 		VkBool32 presentSupport = false;
 
-		for (const auto& queueFamily : queueFamilies)
+		for (size_t i = 0; i < queueFamilies.size(); i++)
 		{
-			if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+			if (queueFamilies[i].queueCount > 0 && queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
 			{
-				indices.graphicsFamily = i;
+				indices.graphicsFamilyIndex = i;
 			}
 
-			// Choose the first queue
-			if (indices.transferFamily == -1 && queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_TRANSFER_BIT /*&& (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0*/)		// Try using an exclusive queue for transfer
+			// Try to find an exclusive queue for transfer if requested
+			if (tryFindTransferOnlyQueue && indices.transferFamilyIndex == -1 && queueFamilies[i].queueCount > 0 && queueFamilies[i].queueFlags & VK_QUEUE_TRANSFER_BIT && (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0)
 			{
-				indices.transferFamily = i;
+				indices.transferFamilyIndex = i;
 			}
 
-			// TODO: If no exclusive compute queue found then find the first that supports compute
-			if (queueFamily.queueCount > 0 && queueFamily.queueFlags & VK_QUEUE_COMPUTE_BIT && (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0)		// Find a compute only queue
+			// Try using an exclusive queue for compute if requested
+			if (tryFindComputeOnlyQueue && indices.computeFamilyIndex == -1 && queueFamilies[i].queueCount > 0 && queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT && (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0)
 			{
-				indices.computeFamily = i;
+				indices.computeFamilyIndex = i;
 			}
 
 			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
 
-			if (queueFamily.queueCount > 0 && presentSupport)
-				indices.presentFamily = i;
+			if (queueFamilies[i].queueCount > 0 && presentSupport)
+				indices.presentFamilyIndex = i;
 
 			if (indices.IsComplete())
 				break;
+		}
 
-			i++;
+		// If we didn't find a transfer exlusive queue, then find the first one that supports transfer
+		if (indices.transferFamilyIndex == -1)
+		{
+			for (size_t i = 0; i < queueFamilies.size(); i++)
+			{
+				if (queueFamilies[i].queueCount > 0 && queueFamilies[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
+				{
+					indices.transferFamilyIndex = i;
+					break;
+				}
+			}
 		}
 
 		// If we didn't find a compute exlusive queue, then find the first one that supports compute
-		if (indices.computeFamily == -1)
+		if (indices.computeFamilyIndex == -1)
 		{
 			for (size_t i = 0; i < queueFamilies.size(); i++)
 			{
 				if (queueFamilies[i].queueCount > 0 && queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT)
 				{
-					indices.computeFamily = i;
+					indices.computeFamilyIndex = i;
 					break;
 				}
 			}

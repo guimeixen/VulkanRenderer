@@ -7,14 +7,14 @@
 namespace vkutils
 {
 	struct QueueFamilyIndices {
-		int graphicsFamily = -1;
-		int presentFamily = -1;
-		int transferFamily = -1;
-		int computeFamily = -1;
+		int graphicsFamilyIndex = -1;
+		int presentFamilyIndex = -1;
+		int transferFamilyIndex = -1;
+		int computeFamilyIndex = -1;
 
 		bool IsComplete()
 		{
-			return graphicsFamily >= 0 && presentFamily >= 0 && transferFamily >= 0 && computeFamily >= 0;
+			return graphicsFamilyIndex >= 0 && presentFamilyIndex >= 0 && transferFamilyIndex >= 0 && computeFamilyIndex >= 0;
 		}
 	};
 
@@ -33,7 +33,7 @@ namespace vkutils
 
 	VkPhysicalDevice ChoosePhysicalDevice(const std::vector<VkPhysicalDevice>& physicalDevices);
 
-	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface);
+	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface, bool tryFindTransferOnlyQueue, bool tryFindComputeOnlyQueue);
 
 	SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface);
 	VkSurfaceFormatKHR ChooseSwapChainSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);

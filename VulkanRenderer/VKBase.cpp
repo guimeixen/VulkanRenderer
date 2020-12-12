@@ -212,10 +212,15 @@ bool VKBase::ChoosePhysicalDevice()
 
 bool VKBase::CreateDevice(VkSurfaceKHR surface)
 {
-	queueIndices = vkutils::FindQueueFamilies(physicalDevice, surface);
+	queueIndices = vkutils::FindQueueFamilies(physicalDevice, surface, false, false);
+
+	std::cout << "Graphics queue index: " << queueIndices.graphicsFamilyIndex << '\n';
+	std::cout << "Present queue index: " << queueIndices.presentFamilyIndex << '\n';
+	std::cout << "Transfer queue index: " << queueIndices.transferFamilyIndex << '\n';
+	std::cout << "Compute queue index: " << queueIndices.computeFamilyIndex << '\n';
 
 	std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-	std::set<int> uniqueQueueFamilies = { queueIndices.graphicsFamily, queueIndices.presentFamily, queueIndices.transferFamily };		// If the graphics family and the present family are the same, which is likely
+	std::set<int> uniqueQueueFamilies = { queueIndices.graphicsFamilyIndex, queueIndices.presentFamilyIndex, queueIndices.transferFamilyIndex, queueIndices.computeFamilyIndex };		// If the graphics family and the present family are the same, which is likely
 
 	float queuePriority = 1.0f;
 
@@ -259,10 +264,10 @@ bool VKBase::CreateDevice(VkSurfaceKHR surface)
 	}
 	std::cout << "Created Device\n";
 
-	vkGetDeviceQueue(device, queueIndices.graphicsFamily, 0, &graphicsQueue);
-	vkGetDeviceQueue(device, queueIndices.presentFamily, 0, &presentQueue);
-	vkGetDeviceQueue(device, queueIndices.transferFamily, 0, &transferQueue);
-	vkGetDeviceQueue(device, queueIndices.computeFamily, 0, &computeQueue);
+	vkGetDeviceQueue(device, queueIndices.graphicsFamilyIndex, 0, &graphicsQueue);
+	vkGetDeviceQueue(device, queueIndices.presentFamilyIndex, 0, &presentQueue);
+	vkGetDeviceQueue(device, queueIndices.transferFamilyIndex, 0, &transferQueue);
+	vkGetDeviceQueue(device, queueIndices.computeFamilyIndex, 0, &computeQueue);
 
 	return true;
 }
