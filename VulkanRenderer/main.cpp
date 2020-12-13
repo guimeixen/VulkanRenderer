@@ -2,11 +2,13 @@
 #include "VKShader.h"
 
 #include "glm/glm.hpp"
+#include "glm/gtc/matrix_transform.hpp"
 
 #include <iostream>
 #include <string>
 #include <set>
 #include <array>
+#include <chrono>
 
 int main()
 {
@@ -197,6 +199,96 @@ int main()
 	vertexStagingBuffer.Dispose(device);
 	indexStagingBuffer.Dispose(device);
 
+
+	struct CameraUBO
+	{
+		glm::mat4 proj;
+		glm::mat4 view;
+		glm::mat4 model;
+	};
+
+	VkDescriptorSetLayoutBinding setlayoutBinding = {};
+	setlayoutBinding.binding = 0;
+	setlayoutBinding.descriptorCount = 1;
+	setlayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	setlayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkDescriptorSetLayoutCreateInfo setLayoutInfo = {};
+	setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	setLayoutInfo.bindingCount = 1;
+	setLayoutInfo.pBindings = &setlayoutBinding;
+
+	VkDescriptorSetLayout setLayout;
+
+	if (vkCreateDescriptorSetLayout(device, &setLayoutInfo, nullptr, &setLayout) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create descriptor set layout\n";
+		return 1;
+	}
+
+	std::vector<VKBuffer> ubos(base.GetSwapchainImageCount());
+
+	for (uint32_t i = 0; i < base.GetSwapchainImageCount(); i++)
+	{
+		ubos[i].Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(CameraUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	}
+
+	VkDescriptorPoolSize descPoolSize = {};
+	descPoolSize.descriptorCount = base.GetSwapchainImageCount();
+	descPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
+	VkDescriptorPoolCreateInfo descPoolInfo = {};
+	descPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+	descPoolInfo.maxSets = base.GetSwapchainImageCount();
+	descPoolInfo.poolSizeCount = 1;
+	descPoolInfo.pPoolSizes = &descPoolSize;
+
+	VkDescriptorPool descriptorPool;
+
+	if (vkCreateDescriptorPool(device, &descPoolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create descriptor pool\n";
+		return 1;
+	}
+	std::cout << "Created descriptor pool\n";
+
+	std::vector<VkDescriptorSetLayout> layouts(base.GetSwapchainImageCount(), setLayout);
+
+	VkDescriptorSetAllocateInfo setAllocInfo = {};
+	setAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	setAllocInfo.descriptorPool = descriptorPool;
+	setAllocInfo.descriptorSetCount = static_cast<uint32_t>(base.GetSwapchainImageCount());
+	setAllocInfo.pSetLayouts = layouts.data();
+
+	std::vector<VkDescriptorSet> descriptorSets;
+
+	descriptorSets.resize(base.GetSwapchainImageCount());
+	if (vkAllocateDescriptorSets(device, &setAllocInfo, descriptorSets.data()) != VK_SUCCESS)
+	{
+		std::cout << "failed to allocate descriptor sets\n";
+		return 1;
+	}
+	std::cout << "Allocated descriptor sets\n";
+
+	for (size_t i = 0; i < base.GetSwapchainImageCount(); i++)
+	{
+		VkDescriptorBufferInfo bufferInfo = {};
+		bufferInfo.buffer = ubos[i].GetBuffer();
+		bufferInfo.offset = 0;
+		bufferInfo.range = VK_WHOLE_SIZE;
+
+		VkWriteDescriptorSet descriptorWrite = {};
+		descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+		descriptorWrite.dstSet = descriptorSets[i];
+		descriptorWrite.dstBinding = 0;
+		descriptorWrite.dstArrayElement = 0;
+		descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+		descriptorWrite.descriptorCount = 1;
+		descriptorWrite.pBufferInfo = &bufferInfo;
+
+		vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+	}
+
 	VkVertexInputBindingDescription bindingDesc = {};
 	bindingDesc.binding = 0;
 	bindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
@@ -214,7 +306,7 @@ int main()
 	attribDesc[1].offset = offsetof(Vertex, color);
 
 	VKShader shader;
-	shader.LoadShader(device, "Data/Shaders/shader_buffer_vert.spv", "Data/Shaders/shader_buffer_frag.spv");
+	shader.LoadShader(device, "Data/Shaders/shader_vert_ubo.spv", "Data/Shaders/shader_buffer_frag.spv");
 
 	VkPipelineShaderStageCreateInfo shaderStages[] = { shader.GetVertexStageInfo(), shader.GetFragmentStageInfo() };
 
@@ -256,7 +348,7 @@ int main()
 	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
 	rasterizer.lineWidth = 1.0f;
 	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-	rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+	rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 	rasterizer.depthBiasEnable = VK_FALSE;
 	rasterizer.depthBiasConstantFactor = 0.0f;
 	rasterizer.depthBiasClamp = 0.0f;
@@ -295,8 +387,8 @@ int main()
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 0;
-	pipelineLayoutInfo.pSetLayouts = nullptr;
+	pipelineLayoutInfo.setLayoutCount = 1;
+	pipelineLayoutInfo.pSetLayouts = &setLayout;
 	pipelineLayoutInfo.pushConstantRangeCount = 0;
 	pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
@@ -379,6 +471,7 @@ int main()
 		vkCmdBindPipeline(cmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 		vkCmdBindVertexBuffers(cmdBuffers[i], 0, 1, vertexBuffers, offsets);
 		vkCmdBindIndexBuffer(cmdBuffers[i], ib.GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
+		vkCmdBindDescriptorSets(cmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i], 0, nullptr);
 		vkCmdDrawIndexed(cmdBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 		vkCmdEndRenderPass(cmdBuffers[i]);
 
@@ -401,6 +494,23 @@ int main()
 		
 		uint32_t imageIndex;
 		vkAcquireNextImageKHR(device, base.GetSwapchain(), UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+		static auto startTime = std::chrono::high_resolution_clock::now();
+
+		auto currentTime = std::chrono::high_resolution_clock::now();
+		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+		CameraUBO ubo = {};
+		ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(20.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		ubo.view = glm::lookAt(glm::vec3(0.0f, 0.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		ubo.proj = glm::perspective(glm::radians(85.0f), (float)width / height, 0.1f, 10.0f);
+		ubo.proj[1][1] *= -1;
+
+		void* data;
+		vkMapMemory(device, ubos[imageIndex].GetBufferMemory(), 0, sizeof(CameraUBO), 0, &data);
+		memcpy(data, &ubo, sizeof(CameraUBO));
+		vkUnmapMemory(device, ubos[imageIndex].GetBufferMemory());
+
 
 		// Check if a previous frame is using this image, then wait on it's fence
 		if (imagesInFlight[imageIndex] != VK_NULL_HANDLE)
@@ -451,8 +561,17 @@ int main()
 
 	vkDeviceWaitIdle(device);
 
+	vkDestroyDescriptorSetLayout(device, setLayout, nullptr);
+
+	for (uint32_t i = 0; i < base.GetSwapchainImageCount(); i++)
+	{
+		ubos[i].Dispose(device);
+	}
+
 	vb.Dispose(device);
 	ib.Dispose(device);
+
+	vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
 	vkDestroyPipeline(device, pipeline, nullptr);
 	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
