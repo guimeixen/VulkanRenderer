@@ -160,27 +160,42 @@ int main()
 	};
 
 	const std::vector<Vertex> vertices = {
-		{{0.0f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-		{{0.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-		{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
+		{{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+		{{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+		{{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+		{{-0.5f, 0.5f}, {1.0f, 1.0f, 0.0f}},
 	};
 
-	VKBuffer stagingBuffer;
-	stagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	const std::vector<unsigned short> indices = { 
+		0, 1, 2, 2, 3, 0
+	};
 
-	unsigned int size = stagingBuffer.GetSize();
+	VKBuffer vertexStagingBuffer, indexStagingBuffer;
+	vertexStagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	indexStagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(unsigned short)* indices.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	unsigned int vertexSize = vertexStagingBuffer.GetSize();
 
 	void* data;
-	vkMapMemory(device, stagingBuffer.GetBufferMemory(), 0, size, 0, &data);
-	memcpy(data, vertices.data(), (size_t)size);
-	vkUnmapMemory(device, stagingBuffer.GetBufferMemory());
+	vkMapMemory(device, vertexStagingBuffer.GetBufferMemory(), 0, vertexSize, 0, &data);
+	memcpy(data, vertices.data(), (size_t)vertexSize);
+	vkUnmapMemory(device, vertexStagingBuffer.GetBufferMemory());
 
-	VKBuffer vb;
+	unsigned int indexSize = indexStagingBuffer.GetSize();
+	vkMapMemory(device, indexStagingBuffer.GetBufferMemory(), 0, indexSize, 0, &data);
+	memcpy(data, indices.data(), (size_t)indexSize);
+	vkUnmapMemory(device, indexStagingBuffer.GetBufferMemory());
+
+
+	VKBuffer vb, ib;
 	vb.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	ib.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(unsigned short)* indices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
-	base.CopyBuffer(stagingBuffer, vb, size);
+	base.CopyBuffer(vertexStagingBuffer, vb, vertexSize);
+	base.CopyBuffer(indexStagingBuffer, ib, indexSize);
 
-	stagingBuffer.Dispose(device);
+	vertexStagingBuffer.Dispose(device);
+	indexStagingBuffer.Dispose(device);
 
 	VkVertexInputBindingDescription bindingDesc = {};
 	bindingDesc.binding = 0;
@@ -363,7 +378,8 @@ int main()
 		vkCmdBeginRenderPass(cmdBuffers[i], &renderBeginPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 		vkCmdBindPipeline(cmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 		vkCmdBindVertexBuffers(cmdBuffers[i], 0, 1, vertexBuffers, offsets);
-		vkCmdDraw(cmdBuffers[i], static_cast<uint32_t>(vertices.size()), 1, 0, 0);
+		vkCmdBindIndexBuffer(cmdBuffers[i], ib.GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
+		vkCmdDrawIndexed(cmdBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
 		vkCmdEndRenderPass(cmdBuffers[i]);
 
 		if (vkEndCommandBuffer(cmdBuffers[i]) != VK_SUCCESS)
@@ -436,6 +452,7 @@ int main()
 	vkDeviceWaitIdle(device);
 
 	vb.Dispose(device);
+	ib.Dispose(device);
 
 	vkDestroyPipeline(device, pipeline, nullptr);
 	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
