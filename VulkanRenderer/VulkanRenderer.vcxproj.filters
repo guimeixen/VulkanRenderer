@@ -27,6 +27,9 @@
     <ClCompile Include="VKBase.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="VKBuffer.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="VKUtils.h">
@@ -36,6 +39,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="VKBase.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="VKBuffer.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "VKUtils.h"
+#include "VKBuffer.h"
 
 #include <GLFW/glfw3.h>
 
@@ -12,6 +13,8 @@ public:
 	bool Init(GLFWwindow *window, unsigned int width, unsigned int height, bool enableValidationLayers);
 	void Dispose();
 
+	void CopyBuffer(const VKBuffer &srcBuffer, const VKBuffer &dstBuffer, unsigned int size);
+
 	VkInstance GetInstance() const { return instance; }
 	VkPhysicalDevice GetPhysicalDevice() const { return physicalDevice; }
 	VkDevice GetDevice() const { return device; }
@@ -19,6 +22,9 @@ public:
 	VkQueue GetPresentQueue() const { return graphicsQueue; }
 	VkQueue GetGraphicsQueue() const { return graphicsQueue; }
 	VkSwapchainKHR GetSwapchain() const { return swapchain; }
+	VkCommandPool GetCommandPool() const { return cmdPool; }
+
+	const VkPhysicalDeviceMemoryProperties &GetPhysicalDeviceMemoryProperties() const { return physicalDeviceMemoryProperties; }
 
 	VkExtent2D GetSurfaceExtent() const { return surfaceExtent; }
 	VkSurfaceFormatKHR GetSurfaceFormat() const { return surfaceFormat; }
@@ -32,6 +38,7 @@ private:
 	bool ChoosePhysicalDevice();
 	bool CreateDevice(VkSurfaceKHR surface);
 	bool CreateSwapchain(unsigned int width, unsigned int height);
+	bool CreateCommandPool();
 
 private:
 	bool enableValidationLayers;
@@ -43,6 +50,7 @@ private:
 	VkInstance instance;
 	VkDebugReportCallbackEXT debugCallback;
 	VkPhysicalDevice physicalDevice;
+	VkPhysicalDeviceMemoryProperties physicalDeviceMemoryProperties;
 	VkDevice device;
 	vkutils::QueueFamilyIndices queueIndices;
 	VkQueue graphicsQueue;
@@ -55,4 +63,6 @@ private:
 	VkSwapchainKHR swapchain;
 	std::vector<VkImage> swapChainImages;
 	std::vector<VkImageView> swapChainImageViews;
+
+	VkCommandPool cmdPool;
 };

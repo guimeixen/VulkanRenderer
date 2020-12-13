@@ -14,7 +14,6 @@ int main()
 	const unsigned int width = 640;
 	const unsigned int height = 480;
 	
-	VkCommandPool cmdPool;
 	VkRenderPass renderPass;
 	std::vector<VkFramebuffer> framebuffers;
 	std::vector<VkCommandBuffer> cmdBuffers;
@@ -47,20 +46,6 @@ int main()
 	VkDevice device = base.GetDevice();
 	VkExtent2D surfaceExtent = base.GetSurfaceExtent();
 	VkSurfaceFormatKHR surfaceFormat = base.GetSurfaceFormat();
-
-	vkutils::QueueFamilyIndices queueIndices = vkutils::FindQueueFamilies(base.GetPhysicalDevice(), base.GetSurface(), false, false);
-
-	VkCommandPoolCreateInfo cmdPoolCreateInfo = {};
-	cmdPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-	cmdPoolCreateInfo.queueFamilyIndex = queueIndices.graphicsFamilyIndex;
-	cmdPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
-
-	if (vkCreateCommandPool(device, &cmdPoolCreateInfo, nullptr, &cmdPool) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create command pool\n";
-		return 1;
-	}
-	std::cout << "Command pool created\n";
 
 	VkAttachmentDescription colorAttachment = {};
 	colorAttachment.format = surfaceFormat.format;
@@ -180,45 +165,22 @@ int main()
 		{{-0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}}
 	};
 
-	VkBuffer vertexBuffer;
+	VKBuffer stagingBuffer;
+	stagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-	VkBufferCreateInfo bufferCreateInfo = {};
-	bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
-	bufferCreateInfo.size = sizeof(Vertex) * vertices.size();
-	bufferCreateInfo.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
-	bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;		// The buffer will only be used from the graphics queue so we can use exlusive. How would we do if we had a separate compute queue
-
-	if (vkCreateBuffer(device, &bufferCreateInfo, nullptr, &vertexBuffer) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create vertex buffer\n";
-		return 1;
-	}
-
-	VkMemoryRequirements memReqs;
-	vkGetBufferMemoryRequirements(device, vertexBuffer, &memReqs);
-
-	VkPhysicalDeviceMemoryProperties memProps = {};
-	vkGetPhysicalDeviceMemoryProperties(base.GetPhysicalDevice(), &memProps);
-
-	VkMemoryAllocateInfo bufAllocInfo = {};
-	bufAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	bufAllocInfo.allocationSize = memReqs.size;
-	bufAllocInfo.memoryTypeIndex = vkutils::FindMemoryType(memProps, memReqs.memoryTypeBits, VK_MEMORY_PROPERTY_HOST_COHERENT_BIT | VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT);
-
-	VkDeviceMemory vertexBufferMemory;
-	
-	if (vkAllocateMemory(device, &bufAllocInfo, nullptr, &vertexBufferMemory) != VK_SUCCESS)
-	{
-		std::cout << "Failed to allocate vertex buffer memory\n";
-		return 1;
-	}
-
-	vkBindBufferMemory(device, vertexBuffer, vertexBufferMemory, 0);
+	unsigned int size = stagingBuffer.GetSize();
 
 	void* data;
-	vkMapMemory(device, vertexBufferMemory, 0, bufferCreateInfo.size, 0, &data);
-	memcpy(data, vertices.data(), (size_t)bufferCreateInfo.size);
-	vkUnmapMemory(device, vertexBufferMemory);
+	vkMapMemory(device, stagingBuffer.GetBufferMemory(), 0, size, 0, &data);
+	memcpy(data, vertices.data(), (size_t)size);
+	vkUnmapMemory(device, stagingBuffer.GetBufferMemory());
+
+	VKBuffer vb;
+	vb.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+	base.CopyBuffer(stagingBuffer, vb, size);
+
+	stagingBuffer.Dispose(device);
 
 	VkVertexInputBindingDescription bindingDesc = {};
 	bindingDesc.binding = 0;
@@ -363,7 +325,7 @@ int main()
 
 	VkCommandBufferAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	allocInfo.commandPool = cmdPool;
+	allocInfo.commandPool = base.GetCommandPool();
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	allocInfo.commandBufferCount = (uint32_t)cmdBuffers.size();
 
@@ -395,7 +357,7 @@ int main()
 		renderBeginPassInfo.clearValueCount = 1;
 		renderBeginPassInfo.pClearValues = &clearColor;
 
-		VkBuffer vertexBuffers[] = { vertexBuffer };
+		VkBuffer vertexBuffers[] = { vb.GetBuffer() };
 		VkDeviceSize offsets[] = {0};
 
 		vkCmdBeginRenderPass(cmdBuffers[i], &renderBeginPassInfo, VK_SUBPASS_CONTENTS_INLINE);
@@ -473,8 +435,7 @@ int main()
 
 	vkDeviceWaitIdle(device);
 
-	vkDestroyBuffer(device, vertexBuffer, nullptr);
-	vkFreeMemory(device, vertexBufferMemory, nullptr);
+	vb.Dispose(device);
 
 	vkDestroyPipeline(device, pipeline, nullptr);
 	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
@@ -494,8 +455,7 @@ int main()
 	}
 
 	vkDestroyRenderPass(device, renderPass, nullptr);
-	vkDestroyCommandPool(device, cmdPool, nullptr);
-
+	
 	base.Dispose();
 
 	glfwTerminate();

@@ -17,6 +17,10 @@ VKBase::VKBase()
 	showAvailableExtensions = false;
 	showMemoryProperties = false;
 
+	cmdPool = VK_NULL_HANDLE;
+
+	physicalDeviceMemoryProperties = {};
+
 	surfaceExtent = {};
 	surfaceFormat = {};
 
@@ -48,12 +52,16 @@ bool VKBase::Init(GLFWwindow* window, unsigned int width, unsigned int height, b
 		return false;
 	if (!CreateSwapchain(width, height))
 		return false;
+	if (!CreateCommandPool())
+		return false;
 
 	return true;
 }
 
 void VKBase::Dispose()
 {
+	vkDestroyCommandPool(device, cmdPool, nullptr);
+
 	for (size_t i = 0; i < swapChainImageViews.size(); i++)
 	{
 		vkDestroyImageView(device, swapChainImageViews[i], nullptr);
@@ -68,6 +76,42 @@ void VKBase::Dispose()
 		vkutils::DestroyDebugReportCallbackEXT(instance, debugCallback, nullptr);
 
 	vkDestroyInstance(instance, nullptr);
+}
+
+void VKBase::CopyBuffer(const VKBuffer& srcBuffer, const VKBuffer& dstBuffer, unsigned int size)
+{
+	VkCommandBufferAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandPool = cmdPool;
+	allocInfo.commandBufferCount = 1;
+
+	VkCommandBuffer commandBuffer;
+	vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+
+	VkCommandBufferBeginInfo beginInfo{};
+	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+	vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+	VkBufferCopy copyRegion = {};
+	copyRegion.srcOffset = 0;
+	copyRegion.dstOffset = 0;
+	copyRegion.size = size;
+	vkCmdCopyBuffer(commandBuffer, srcBuffer.GetBuffer(), dstBuffer.GetBuffer(), 1, &copyRegion);
+
+	vkEndCommandBuffer(commandBuffer);
+
+	VkSubmitInfo submitInfo = {};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &commandBuffer;
+
+	vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+	vkQueueWaitIdle(graphicsQueue);
+
+	vkFreeCommandBuffers(device, cmdPool, 1, &commandBuffer);
 }
 
 bool VKBase::CreateInstance()
@@ -180,42 +224,41 @@ bool VKBase::ChoosePhysicalDevice()
 
 	VkPhysicalDeviceFeatures deviceFeatures;
 	VkPhysicalDeviceProperties deviceProperties;
-	VkPhysicalDeviceMemoryProperties deviceMemoryProperties;
 
 	vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
 	vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
-	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &deviceMemoryProperties);
+	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &physicalDeviceMemoryProperties);
 
 	std::cout << "GPU: " << deviceProperties.deviceName << '\n';
 	std::cout << "Max allocations: " << deviceProperties.limits.maxMemoryAllocationCount << '\n';
-	std::cout << "Memory heaps: " << deviceMemoryProperties.memoryHeapCount << '\n';
+	std::cout << "Memory heaps: " << physicalDeviceMemoryProperties.memoryHeapCount << '\n';
 	std::cout << "Max push constant size: " << deviceProperties.limits.maxPushConstantsSize << '\n';
 
 	if (showMemoryProperties)
 	{
-		for (uint32_t i = 0; i < deviceMemoryProperties.memoryHeapCount; i++)
+		for (uint32_t i = 0; i < physicalDeviceMemoryProperties.memoryHeapCount; i++)
 		{
-			if (deviceMemoryProperties.memoryHeaps[i].flags == VkMemoryHeapFlagBits::VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
-				std::cout << "\tSize: " << (deviceMemoryProperties.memoryHeaps[i].size >> 20) << " mib - Device Local\n";
+			if (physicalDeviceMemoryProperties.memoryHeaps[i].flags == VkMemoryHeapFlagBits::VK_MEMORY_HEAP_DEVICE_LOCAL_BIT)
+				std::cout << "\tSize: " << (physicalDeviceMemoryProperties.memoryHeaps[i].size >> 20) << " mib - Device Local\n";
 			else
-				std::cout << "\tSize: " << (deviceMemoryProperties.memoryHeaps[i].size >> 20) << " mib\n";
+				std::cout << "\tSize: " << (physicalDeviceMemoryProperties.memoryHeaps[i].size >> 20) << " mib\n";
 		}
 
-		std::cout << "Memory types: " << deviceMemoryProperties.memoryTypeCount << '\n';
+		std::cout << "Memory types: " << physicalDeviceMemoryProperties.memoryTypeCount << '\n';
 
 		std::string str;
-		for (uint32_t i = 0; i < deviceMemoryProperties.memoryTypeCount; i++)
+		for (uint32_t i = 0; i < physicalDeviceMemoryProperties.memoryTypeCount; i++)
 		{
-			if ((deviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
+			if ((physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT) == VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT)
 				str += "Device local, ";
-			if ((deviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
+			if ((physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT) == VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT)
 				str += "Host visible, ";
-			if ((deviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
+			if ((physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_COHERENT_BIT) == VK_MEMORY_PROPERTY_HOST_COHERENT_BIT)
 				str += "Host coherent, ";
-			if ((deviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) == VK_MEMORY_PROPERTY_HOST_CACHED_BIT)
+			if ((physicalDeviceMemoryProperties.memoryTypes[i].propertyFlags & VK_MEMORY_PROPERTY_HOST_CACHED_BIT) == VK_MEMORY_PROPERTY_HOST_CACHED_BIT)
 				str += "Host cached, ";
 
-			std::cout << "\tHeap index: " << deviceMemoryProperties.memoryTypes[i].heapIndex << " - Property Flags: " << str << '\n';
+			std::cout << "\tHeap index: " << physicalDeviceMemoryProperties.memoryTypes[i].heapIndex << " - Property Flags: " << str << '\n';
 			str.clear();
 		}
 	}
@@ -372,6 +415,23 @@ bool VKBase::CreateSwapchain(unsigned int width, unsigned int height)
 		}
 	}
 	std::cout << "Created swapchain image views\n";
+
+	return true;
+}
+
+bool VKBase::CreateCommandPool()
+{
+	VkCommandPoolCreateInfo cmdPoolCreateInfo = {};
+	cmdPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	cmdPoolCreateInfo.queueFamilyIndex = queueIndices.graphicsFamilyIndex;
+	cmdPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+	if (vkCreateCommandPool(device, &cmdPoolCreateInfo, nullptr, &cmdPool) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create command pool\n";
+		return false;
+	}
+	std::cout << "Command pool created\n";
 
 	return true;
 }
