@@ -214,7 +214,7 @@ bool VKBase::ChoosePhysicalDevice()
 	std::vector<VkPhysicalDevice> physicalDevices(deviceCount);
 	vkEnumeratePhysicalDevices(instance, &deviceCount, physicalDevices.data());
 
-	physicalDevice = vkutils::ChoosePhysicalDevice(physicalDevices);
+	physicalDevice = vkutils::ChoosePhysicalDevice(physicalDevices, deviceExtensions);
 
 	if (physicalDevice == VK_NULL_HANDLE)
 	{

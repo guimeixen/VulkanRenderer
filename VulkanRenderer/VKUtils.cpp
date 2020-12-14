@@ -82,20 +82,20 @@ namespace vkutils
 			func(instance, callback, pAllocator);
 	}
 
-	VkPhysicalDevice ChoosePhysicalDevice(const std::vector<VkPhysicalDevice>& physicalDevices)
+	VkPhysicalDevice ChoosePhysicalDevice(const std::vector<VkPhysicalDevice>& physicalDevices, const std::vector<const char*>& deviceExtensions)
 	{
 		// Try to find a discrete GPU
 
 		VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 
-		for (const VkPhysicalDevice &pd : physicalDevices)
+		for (size_t i = 0; i < physicalDevices.size(); i++)
 		{
 			VkPhysicalDeviceProperties deviceProperties;
-			vkGetPhysicalDeviceProperties(pd, &deviceProperties);
+			vkGetPhysicalDeviceProperties(physicalDevices[i], &deviceProperties);
 
-			if (deviceProperties.deviceType == VkPhysicalDeviceType::VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU)
+			if (deviceProperties.deviceType == VkPhysicalDeviceType::VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU && CheckPhysicalDeviceExtensionSupport(physicalDevices[i], deviceExtensions))
 			{
-				physicalDevice = pd;
+				physicalDevice = physicalDevices[i];
 				break;
 			}
 		}
@@ -104,20 +104,51 @@ namespace vkutils
 
 		if (physicalDevice == VK_NULL_HANDLE)
 		{
-			for (const VkPhysicalDevice& pd : physicalDevices)
+			for (size_t i = 0; i < physicalDevices.size(); i++)
 			{
 				VkPhysicalDeviceProperties deviceProperties;
-				vkGetPhysicalDeviceProperties(pd, &deviceProperties);
+				vkGetPhysicalDeviceProperties(physicalDevices[i], &deviceProperties);
 
-				if (deviceProperties.deviceType == VkPhysicalDeviceType::VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU)
+				if (deviceProperties.deviceType == VkPhysicalDeviceType::VK_PHYSICAL_DEVICE_TYPE_INTEGRATED_GPU && CheckPhysicalDeviceExtensionSupport(physicalDevices[i], deviceExtensions))
 				{
-					physicalDevice = pd;
+					physicalDevice = physicalDevices[i];
 					break;
 				}
 			}
 		}
 
 		return physicalDevice;
+	}
+
+	bool CheckPhysicalDeviceExtensionSupport(VkPhysicalDevice physicalDevice, const std::vector<const char*>& deviceExtensions)
+	{
+		uint32_t extensionCount = 0;
+		vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, nullptr);
+
+		std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+		vkEnumerateDeviceExtensionProperties(physicalDevice, nullptr, &extensionCount, availableExtensions.data());
+
+		bool supported = false;
+		for (size_t i = 0; i < deviceExtensions.size(); i++)
+		{
+			supported = false;
+			for (size_t j = 0; j < availableExtensions.size(); j++)
+			{
+				if (strcmp(availableExtensions[j].extensionName, deviceExtensions[i]) == 0)
+				{
+					supported = true;
+					break;
+				}
+			}
+
+			if (!supported)
+			{
+				std::cout << "Extension: " << deviceExtensions[i] << " requested, but not supported\n";
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface, bool tryFindTransferOnlyQueue, bool tryFindComputeOnlyQueue)
@@ -136,10 +167,19 @@ namespace vkutils
 
 		for (size_t i = 0; i < queueFamilies.size(); i++)
 		{
+			std::cout << "Family " << i << " has " << queueFamilies[i].queueCount << " queues "<< "that support ";
+
 			if (queueFamilies[i].queueCount > 0 && queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
 			{
+				std::cout << "GRAPHICS, ";
 				indices.graphicsFamilyIndex = i;
 			}
+			if (queueFamilies[i].queueCount > 0 && queueFamilies[i].queueFlags & VK_QUEUE_TRANSFER_BIT)
+				std::cout << "TRANSFER, ";
+			if (queueFamilies[i].queueCount > 0 && queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT)
+				std::cout << "COMPUTE, ";
+			if (queueFamilies[i].queueCount > 0 && queueFamilies[i].queueFlags & VK_QUEUE_SPARSE_BINDING_BIT)
+				std::cout << "SPARSE BINDING, ";
 
 			// Try to find an exclusive queue for transfer if requested
 			if (tryFindTransferOnlyQueue && indices.transferFamilyIndex == -1 && queueFamilies[i].queueCount > 0 && queueFamilies[i].queueFlags & VK_QUEUE_TRANSFER_BIT && (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) == 0)
@@ -153,14 +193,23 @@ namespace vkutils
 				indices.computeFamilyIndex = i;
 			}
 
+
+			// Check if this queue family supports presentation
 			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
 
 			if (queueFamilies[i].queueCount > 0 && presentSupport)
+			{
+				std::cout << "and PRESENT";
 				indices.presentFamilyIndex = i;
+			}
+
+			std::cout << std::endl;
 
 			if (indices.IsComplete())
 				break;
 		}
+		
+		
 
 		// If we didn't find a transfer exlusive queue, then find the first one that supports transfer
 		if (indices.transferFamilyIndex == -1)
