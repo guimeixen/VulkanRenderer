@@ -13,6 +13,7 @@ public:
 	bool Init(GLFWwindow *window, unsigned int width, unsigned int height, bool enableValidationLayers);
 	void Dispose();
 
+	void RecreateSwapchain(unsigned int width, unsigned int height);
 	void CopyBuffer(const VKBuffer &srcBuffer, const VKBuffer &dstBuffer, unsigned int size);
 
 	VkInstance GetInstance() const { return instance; }

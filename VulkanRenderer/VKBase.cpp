@@ -78,6 +78,18 @@ void VKBase::Dispose()
 	vkDestroyInstance(instance, nullptr);
 }
 
+void VKBase::RecreateSwapchain(unsigned int width, unsigned int height)
+{
+	for (size_t i = 0; i < swapChainImageViews.size(); i++)
+	{
+		vkDestroyImageView(device, swapChainImageViews[i], nullptr);
+	}
+
+	vkDestroySwapchainKHR(device, swapchain, nullptr);
+
+	CreateSwapchain(width, height);
+}
+
 void VKBase::CopyBuffer(const VKBuffer& srcBuffer, const VKBuffer& dstBuffer, unsigned int size)
 {
 	VkCommandBufferAllocateInfo allocInfo = {};
@@ -332,6 +344,17 @@ bool VKBase::CreateSwapchain(unsigned int width, unsigned int height)
 {
 	vkutils::SwapChainSupportDetails swapChainSupport = vkutils::QuerySwapChainSupport(physicalDevice, surface);
 
+	if (swapChainSupport.formats.size() == 0)
+	{
+		std::cout << "0 swapchain formats available\n";
+		return false;
+	}
+	if (swapChainSupport.presentModes.size() == 0)
+	{
+		std::cout << "0 swapchain present modes available\n";
+		return false;
+	}
+
 	surfaceFormat = vkutils::ChooseSwapChainSurfaceFormat(swapChainSupport.formats);
 	VkPresentModeKHR presentMode = vkutils::ChooseSwapChainPresentMode(swapChainSupport.presentModes);
 	surfaceExtent = vkutils::ChooseSwapChainExtent(swapChainSupport.capabilities, width, height);
@@ -343,6 +366,8 @@ bool VKBase::CreateSwapchain(unsigned int width, unsigned int height)
 	{
 		imageCount = swapChainSupport.capabilities.maxImageCount;
 	}
+
+	std::cout << "Swapchain image count: " << imageCount << '\n';
 
 	VkSwapchainCreateInfoKHR swapChainInfo = {};
 	swapChainInfo.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
@@ -356,7 +381,7 @@ bool VKBase::CreateSwapchain(unsigned int width, unsigned int height)
 	swapChainInfo.preTransform = swapChainSupport.capabilities.currentTransform;	// We could flip the images or do other things but we don't want to so use the currentTransform
 	swapChainInfo.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;			// Used for blending with other windows.
 	swapChainInfo.presentMode = presentMode;
-	swapChainInfo.clipped = VK_TRUE;		// If true then we don't care about the color of pixels that are obscured, eg. because another window is in front of them. Best performance with it enabled
+	swapChainInfo.clipped = VK_TRUE;
 	swapChainInfo.oldSwapchain = VK_NULL_HANDLE;
 
 	uint32_t queueFamilyIndices[] = { (uint32_t)queueIndices.graphicsFamilyIndex, (uint32_t)queueIndices.presentFamilyIndex };
@@ -366,6 +391,7 @@ bool VKBase::CreateSwapchain(unsigned int width, unsigned int height)
 		swapChainInfo.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
 		swapChainInfo.queueFamilyIndexCount = 2;
 		swapChainInfo.pQueueFamilyIndices = queueFamilyIndices;
+		std::cout << "Graphics and present queue family different\n";
 	}
 	else
 	{

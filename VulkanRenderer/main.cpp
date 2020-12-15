@@ -10,47 +10,27 @@
 #include <array>
 #include <chrono>
 
-int main()
+unsigned int width = 640;
+unsigned int height = 480;
+VkPipeline pipeline;
+VkPipelineLayout pipelineLayout;
+VKBuffer ib, vb;
+std::vector<VkDescriptorSet> descriptorSets;
+
+const std::vector<unsigned short> indices = {
+		0, 1, 2, 2, 3, 0
+};
+
+static void FramebufferResizeCallback(GLFWwindow *window, int newWidth, int newHeight)
 {
-	const int MAX_FRAMES_IN_FLIGHT = 2;
-	const unsigned int width = 640;
-	const unsigned int height = 480;
-	
-	VkRenderPass renderPass;
-	std::vector<VkFramebuffer> framebuffers;
-	std::vector<VkCommandBuffer> cmdBuffers;
-	std::vector<VkSemaphore> imageAvailableSemaphores;
-	std::vector<VkSemaphore> renderFinishedSemaphores;
-	std::vector<VkFence> frameFences;
-	std::vector<VkFence> imagesInFlight;
+	width = newWidth;
+	height = newHeight;
+}
 
-	if (glfwInit() != GLFW_TRUE)
-	{
-		std::cout << "Failed to initialize GLFW\n";
-	}
-	else
-	{
-		std::cout << "GLFW successfuly initialized\n";
-	}
-
-	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	GLFWwindow *window = glfwCreateWindow((int)width, (int)height, "VulkanRenderer", nullptr, nullptr);
-
-	glfwSetWindowPos(window, 400, 100);
-
-	VKBase base;
-	if (!base.Init(window, true, width, height))
-	{
-		glfwTerminate();
-		return 1;
-	}
-
-	VkDevice device = base.GetDevice();
-	VkExtent2D surfaceExtent = base.GetSurfaceExtent();
-	VkSurfaceFormatKHR surfaceFormat = base.GetSurfaceFormat();
-
+bool CreateRenderPass(const VKBase &base, VkRenderPass &renderPass)
+{
 	VkAttachmentDescription colorAttachment = {};
-	colorAttachment.format = surfaceFormat.format;
+	colorAttachment.format = base.GetSurfaceFormat().format;
 	colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
 	colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
 	colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -91,14 +71,18 @@ int main()
 	renderPassInfo.dependencyCount = 1;
 	renderPassInfo.pDependencies = &dependency;
 
-	if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS)
+	if (vkCreateRenderPass(base.GetDevice(), &renderPassInfo, nullptr, &renderPass) != VK_SUCCESS)
 	{
 		std::cout << "Failed to create render pass\n";
-		return 1;
+		return false;
 	}
 	std::cout << "Created render pass\n";
 
-	// Frambuffer
+	return true;
+}
+
+bool CreateFramebuffers(const VKBase &base, VkRenderPass renderPass, std::vector<VkFramebuffer> &framebuffers)
+{
 	framebuffers.resize(base.GetSwapchainImageCount());
 
 	const std::vector<VkImage> swapChainImageViews = base.GetSwapchainImageViews();
@@ -112,17 +96,131 @@ int main()
 		framebufferInfo.renderPass = renderPass;
 		framebufferInfo.attachmentCount = 1;
 		framebufferInfo.pAttachments = attachments;
-		framebufferInfo.width = surfaceExtent.width;
-		framebufferInfo.height = surfaceExtent.height;
+		framebufferInfo.width = base.GetSurfaceExtent().width;
+		framebufferInfo.height = base.GetSurfaceExtent().height;
 		framebufferInfo.layers = 1;
 
-		if (vkCreateFramebuffer(device, &framebufferInfo, nullptr, &framebuffers[i]) != VK_SUCCESS)
+		if (vkCreateFramebuffer(base.GetDevice(), &framebufferInfo, nullptr, &framebuffers[i]) != VK_SUCCESS)
 		{
 			std::cout << "Failed to create swapchain framebuffers\n";
-			return 1;
+			return false;
 		}
 	}
 	std::cout << "Created framebuffers\n";
+
+	return true;
+}
+
+bool CreateCommandBuffers(const VKBase &base, VkRenderPass renderPass, VkExtent2D surfaceExtent, const std::vector<VkFramebuffer> &framebuffers, std::vector<VkCommandBuffer> &cmdBuffers)
+{
+	cmdBuffers.resize(framebuffers.size());
+
+	VkCommandBufferAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.commandPool = base.GetCommandPool();
+	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandBufferCount = (uint32_t)cmdBuffers.size();
+
+	if (vkAllocateCommandBuffers(base.GetDevice(), &allocInfo, cmdBuffers.data()) != VK_SUCCESS)
+	{
+		std::cout << "Failed to allocate command buffers!\n";
+		return false;
+	}
+
+	for (size_t i = 0; i < cmdBuffers.size(); i++)
+	{
+		VkCommandBufferBeginInfo beginInfo = {};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+
+		if (vkBeginCommandBuffer(cmdBuffers[i], &beginInfo) != VK_SUCCESS)
+		{
+			std::cout << "Failed to begin recording command buffer!\n";
+			return false;
+		}
+
+		VkClearValue clearColor = { 0.3f, 0.3f, 0.3f, 1.0f };
+
+		VkRenderPassBeginInfo renderBeginPassInfo = {};
+		renderBeginPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		renderBeginPassInfo.renderPass = renderPass;
+		renderBeginPassInfo.framebuffer = framebuffers[i];
+		renderBeginPassInfo.renderArea.offset = { 0, 0 };
+		renderBeginPassInfo.renderArea.extent = surfaceExtent;
+		renderBeginPassInfo.clearValueCount = 1;
+		renderBeginPassInfo.pClearValues = &clearColor;
+
+		VkBuffer vertexBuffers[] = { vb.GetBuffer() };
+		VkDeviceSize offsets[] = { 0 };
+
+		VkViewport viewport = {};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = (float)surfaceExtent.width;
+		viewport.height = (float)surfaceExtent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		vkCmdBeginRenderPass(cmdBuffers[i], &renderBeginPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+		vkCmdSetViewport(cmdBuffers[i], 0, 1, &viewport);
+		vkCmdBindPipeline(cmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+		vkCmdBindVertexBuffers(cmdBuffers[i], 0, 1, vertexBuffers, offsets);
+		vkCmdBindIndexBuffer(cmdBuffers[i], ib.GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
+		vkCmdBindDescriptorSets(cmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i], 0, nullptr);
+		vkCmdDrawIndexed(cmdBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+		vkCmdEndRenderPass(cmdBuffers[i]);
+
+		if (vkEndCommandBuffer(cmdBuffers[i]) != VK_SUCCESS)
+		{
+			std::cout << "Failed to record command buffer!\n";
+			return false;
+		}
+	}
+
+	return true;
+}
+
+int main()
+{
+	const int MAX_FRAMES_IN_FLIGHT = 2;
+		
+	VkRenderPass renderPass;
+	std::vector<VkFramebuffer> framebuffers;
+	std::vector<VkCommandBuffer> cmdBuffers;
+	std::vector<VkSemaphore> imageAvailableSemaphores;
+	std::vector<VkSemaphore> renderFinishedSemaphores;
+	std::vector<VkFence> frameFences;
+	std::vector<VkFence> imagesInFlight;
+
+	if (glfwInit() != GLFW_TRUE)
+	{
+		std::cout << "Failed to initialize GLFW\n";
+	}
+	else
+	{
+		std::cout << "GLFW successfuly initialized\n";
+	}
+
+	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+	GLFWwindow *window = glfwCreateWindow((int)width, (int)height, "VulkanRenderer", nullptr, nullptr);
+
+	glfwSetWindowPos(window, 400, 100);
+	glfwSetFramebufferSizeCallback(window, FramebufferResizeCallback);
+
+	VKBase base;
+	if (!base.Init(window, true, width, height))
+	{
+		glfwTerminate();
+		return 1;
+	}
+
+	VkDevice device = base.GetDevice();
+	VkExtent2D surfaceExtent = base.GetSurfaceExtent();
+	VkSurfaceFormatKHR surfaceFormat = base.GetSurfaceFormat();
+
+	if (!CreateRenderPass(base, renderPass))
+		return 1;
+	if (!CreateFramebuffers(base, renderPass, framebuffers))
+		return 1;
 
 	imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
 	renderFinishedSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
@@ -168,9 +266,7 @@ int main()
 		{{-0.5f, 0.5f}, {1.0f, 1.0f, 0.0f}},
 	};
 
-	const std::vector<unsigned short> indices = { 
-		0, 1, 2, 2, 3, 0
-	};
+	
 
 	VKBuffer vertexStagingBuffer, indexStagingBuffer;
 	vertexStagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
@@ -189,7 +285,6 @@ int main()
 	vkUnmapMemory(device, indexStagingBuffer.GetBufferMemory());
 
 
-	VKBuffer vb, ib;
 	vb.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 	ib.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(unsigned short)* indices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
@@ -260,7 +355,6 @@ int main()
 	setAllocInfo.descriptorSetCount = static_cast<uint32_t>(base.GetSwapchainImageCount());
 	setAllocInfo.pSetLayouts = layouts.data();
 
-	std::vector<VkDescriptorSet> descriptorSets;
 
 	descriptorSets.resize(base.GetSwapchainImageCount());
 	if (vkAllocateDescriptorSets(device, &setAllocInfo, descriptorSets.data()) != VK_SUCCESS)
@@ -375,15 +469,13 @@ int main()
 
 	VkDynamicState dynamicStates[] = {
 		VK_DYNAMIC_STATE_VIEWPORT,
-		VK_DYNAMIC_STATE_LINE_WIDTH
+		//VK_DYNAMIC_STATE_LINE_WIDTH
 	};
 
 	VkPipelineDynamicStateCreateInfo dynamicState = {};
 	dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-	dynamicState.dynamicStateCount = 2;
+	dynamicState.dynamicStateCount = 1;
 	dynamicState.pDynamicStates = dynamicStates;
-
-	VkPipelineLayout pipelineLayout;
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
@@ -410,14 +502,12 @@ int main()
 	pipelineInfo.pMultisampleState = &multisampling;
 	pipelineInfo.pDepthStencilState = nullptr;
 	pipelineInfo.pColorBlendState = &colorBlending;
-	pipelineInfo.pDynamicState = nullptr;
+	pipelineInfo.pDynamicState = &dynamicState;
 	pipelineInfo.layout = pipelineLayout;
 	pipelineInfo.renderPass = renderPass;
 	pipelineInfo.subpass = 0;
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 	pipelineInfo.basePipelineIndex = -1;
-
-	VkPipeline pipeline;
 
 	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS)
 	{
@@ -427,60 +517,9 @@ int main()
 	std::cout << "Create pipeline\n";
 	
 
-
-	cmdBuffers.resize(framebuffers.size());
-
-	VkCommandBufferAllocateInfo allocInfo = {};
-	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	allocInfo.commandPool = base.GetCommandPool();
-	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	allocInfo.commandBufferCount = (uint32_t)cmdBuffers.size();
-
-	if (vkAllocateCommandBuffers(device, &allocInfo, cmdBuffers.data()) != VK_SUCCESS)
-	{
-		std::cout << "Failed to allocate command buffers!\n";
+	if (!CreateCommandBuffers(base, renderPass, surfaceExtent, framebuffers, cmdBuffers))
 		return 1;
-	}
-
-	for (size_t i = 0; i < cmdBuffers.size(); i++)
-	{
-		VkCommandBufferBeginInfo beginInfo = {};
-		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-
-		if (vkBeginCommandBuffer(cmdBuffers[i], &beginInfo) != VK_SUCCESS)
-		{
-			std::cout << "Failed to begin recording command buffer!\n";
-			return 1;
-		}
-
-		VkClearValue clearColor = { 0.3f, 0.3f, 0.3f, 1.0f };
-
-		VkRenderPassBeginInfo renderBeginPassInfo = {};
-		renderBeginPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderBeginPassInfo.renderPass = renderPass;
-		renderBeginPassInfo.framebuffer = framebuffers[i];
-		renderBeginPassInfo.renderArea.offset = { 0, 0 };
-		renderBeginPassInfo.renderArea.extent = surfaceExtent;
-		renderBeginPassInfo.clearValueCount = 1;
-		renderBeginPassInfo.pClearValues = &clearColor;
-
-		VkBuffer vertexBuffers[] = { vb.GetBuffer() };
-		VkDeviceSize offsets[] = {0};
-
-		vkCmdBeginRenderPass(cmdBuffers[i], &renderBeginPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-		vkCmdBindPipeline(cmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
-		vkCmdBindVertexBuffers(cmdBuffers[i], 0, 1, vertexBuffers, offsets);
-		vkCmdBindIndexBuffer(cmdBuffers[i], ib.GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
-		vkCmdBindDescriptorSets(cmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i], 0, nullptr);
-		vkCmdDrawIndexed(cmdBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
-		vkCmdEndRenderPass(cmdBuffers[i]);
-
-		if (vkEndCommandBuffer(cmdBuffers[i]) != VK_SUCCESS)
-		{
-			std::cout << "Failed to record command buffer!\n";
-			return 1;
-		}
-	}
+	
 
 	VkQueue graphicsQueue = base.GetGraphicsQueue();
 	VkQueue presentQueue = base.GetPresentQueue();
@@ -493,7 +532,33 @@ int main()
 		vkWaitForFences(device, 1, &frameFences[currentFrame], VK_TRUE, UINT64_MAX);
 		
 		uint32_t imageIndex;
-		vkAcquireNextImageKHR(device, base.GetSwapchain(), UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+		VkResult res = vkAcquireNextImageKHR(device, base.GetSwapchain(), UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
+
+		if (res == VK_SUBOPTIMAL_KHR)
+		{
+			std::cout << "Swapchain suboptimal\n";
+		}
+		else if (res == VK_ERROR_OUT_OF_DATE_KHR)
+		{
+			vkDeviceWaitIdle(device);
+
+			for (size_t i = 0; i < framebuffers.size(); i++)
+			{
+				vkDestroyFramebuffer(device, framebuffers[i], nullptr);
+			}
+
+			vkDestroyRenderPass(device, renderPass, nullptr);
+
+			vkFreeCommandBuffers(device, base.GetCommandPool(), static_cast<uint32_t>(cmdBuffers.size()), cmdBuffers.data());
+
+			base.RecreateSwapchain(width, height);
+			CreateRenderPass(base, renderPass);
+			CreateFramebuffers(base, renderPass, framebuffers);
+			CreateCommandBuffers(base, renderPass, base.GetSurfaceExtent(), framebuffers, cmdBuffers);
+
+			// We can't present so go to the next iteration
+			continue;
+		}
 
 		static auto startTime = std::chrono::high_resolution_clock::now();
 
@@ -521,20 +586,17 @@ int main()
 		// The image is now in use by this frame
 		imagesInFlight[imageIndex] = frameFences[currentFrame];
 
-		VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame] };
 		VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-
-		VkSemaphore signalSemaphores[] = { renderFinishedSemaphores[currentFrame] };
 
 		VkSubmitInfo submitInfo = {};
 		submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;	
 		submitInfo.waitSemaphoreCount = 1;
-		submitInfo.pWaitSemaphores = waitSemaphores;
+		submitInfo.pWaitSemaphores = &imageAvailableSemaphores[currentFrame];
 		submitInfo.pWaitDstStageMask = waitStages;
 		submitInfo.commandBufferCount = 1;
 		submitInfo.pCommandBuffers = &cmdBuffers[imageIndex];
 		submitInfo.signalSemaphoreCount = 1;
-		submitInfo.pSignalSemaphores = signalSemaphores;
+		submitInfo.pSignalSemaphores = &renderFinishedSemaphores[currentFrame];
 
 		vkResetFences(device, 1, &frameFences[currentFrame]);
 
@@ -549,12 +611,35 @@ int main()
 		VkPresentInfoKHR presentInfo = {};
 		presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 		presentInfo.waitSemaphoreCount = 1;
-		presentInfo.pWaitSemaphores = signalSemaphores;
+		presentInfo.pWaitSemaphores = &renderFinishedSemaphores[currentFrame];
 		presentInfo.swapchainCount = 1;
 		presentInfo.pSwapchains = swapChains;
 		presentInfo.pImageIndices = &imageIndex;
 
-		vkQueuePresentKHR(presentQueue, &presentInfo);
+		res = vkQueuePresentKHR(presentQueue, &presentInfo);
+
+		if (res == VK_SUBOPTIMAL_KHR)
+		{
+			std::cout << "Swapchain suboptimal\n";
+		}
+		else if (res == VK_ERROR_OUT_OF_DATE_KHR)
+		{
+			vkDeviceWaitIdle(device);
+
+			for (size_t i = 0; i < framebuffers.size(); i++)
+			{
+				vkDestroyFramebuffer(device, framebuffers[i], nullptr);
+			}
+
+			vkDestroyRenderPass(device, renderPass, nullptr);
+
+			vkFreeCommandBuffers(device, base.GetCommandPool(), static_cast<uint32_t>(cmdBuffers.size()), cmdBuffers.data());
+
+			base.RecreateSwapchain(width, height);
+			CreateRenderPass(base, renderPass);
+			CreateFramebuffers(base, renderPass, framebuffers);
+			CreateCommandBuffers(base, renderPass, base.GetSurfaceExtent(), framebuffers, cmdBuffers);
+		}
 
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 	}

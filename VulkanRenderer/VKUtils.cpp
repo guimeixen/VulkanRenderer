@@ -165,6 +165,8 @@ namespace vkutils
 
 		VkBool32 presentSupport = false;
 
+		// TODO: Check if graphics and present queue family is the same and prefer it
+
 		for (size_t i = 0; i < queueFamilies.size(); i++)
 		{
 			std::cout << "Family " << i << " has " << queueFamilies[i].queueCount << " queues "<< "that support ";
@@ -242,7 +244,7 @@ namespace vkutils
 
 	SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device, VkSurfaceKHR surface)
 	{
-		SwapChainSupportDetails details;
+		SwapChainSupportDetails details = {};
 
 		// Surface capabilities
 		vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface, &details.capabilities);
@@ -288,7 +290,6 @@ namespace vkutils
 		}
 
 		// If that fails we could rank the format based on how good they are
-		// but in most cases it's ok to settle with the first one
 		return availableFormats[0];
 	}
 
