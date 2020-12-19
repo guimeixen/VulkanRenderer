@@ -143,6 +143,7 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="stb.cpp" />
     <ClCompile Include="VKBase.cpp" />
     <ClCompile Include="VKBuffer.cpp" />
     <ClCompile Include="VKShader.cpp" />

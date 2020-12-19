@@ -90,7 +90,7 @@ void VKBase::RecreateSwapchain(unsigned int width, unsigned int height)
 	CreateSwapchain(width, height);
 }
 
-void VKBase::CopyBuffer(const VKBuffer& srcBuffer, const VKBuffer& dstBuffer, unsigned int size)
+VkCommandBuffer VKBase::BeginSingleUseCmdBuffer()
 {
 	VkCommandBufferAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
@@ -98,32 +98,157 @@ void VKBase::CopyBuffer(const VKBuffer& srcBuffer, const VKBuffer& dstBuffer, un
 	allocInfo.commandPool = cmdPool;
 	allocInfo.commandBufferCount = 1;
 
-	VkCommandBuffer commandBuffer;
-	vkAllocateCommandBuffers(device, &allocInfo, &commandBuffer);
+	VkCommandBuffer cmdBuffer;
+	
+	if (vkAllocateCommandBuffers(device, &allocInfo, &cmdBuffer) != VK_SUCCESS)
+	{
+		std::cout << "Failed to allocate command buffer\n";
+		return VK_NULL_HANDLE;
+	}
 
 	VkCommandBufferBeginInfo beginInfo{};
 	beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
 	beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
 
-	vkBeginCommandBuffer(commandBuffer, &beginInfo);
+	if (vkBeginCommandBuffer(cmdBuffer, &beginInfo) != VK_SUCCESS)
+	{
+		std::cout << "Failed to begin command buffer\n";
+		return VK_NULL_HANDLE;
+	}
+
+	return cmdBuffer;
+}
+
+bool VKBase::EndSingleUseCmdBuffer(VkCommandBuffer cmdBuffer)
+{
+	if (vkEndCommandBuffer(cmdBuffer) != VK_SUCCESS)
+	{
+		std::cout << "Failed to end command buffer\n";
+		return false;
+	}
+
+	VkSubmitInfo submitInfo = {};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &cmdBuffer;
+
+	vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+	vkQueueWaitIdle(graphicsQueue);
+
+	vkFreeCommandBuffers(device, cmdPool, 1, &cmdBuffer);
+}
+
+void VKBase::CopyBuffer(const VKBuffer& srcBuffer, const VKBuffer& dstBuffer, unsigned int size)
+{
+	VkCommandBuffer cmdBuffer = BeginSingleUseCmdBuffer();
+
+	if (cmdBuffer == VK_NULL_HANDLE)
+	{
+		std::cout << "Failed to copy buffer, command buffer null handle\n";
+		return;
+	}
 
 	VkBufferCopy copyRegion = {};
 	copyRegion.srcOffset = 0;
 	copyRegion.dstOffset = 0;
 	copyRegion.size = size;
-	vkCmdCopyBuffer(commandBuffer, srcBuffer.GetBuffer(), dstBuffer.GetBuffer(), 1, &copyRegion);
+	vkCmdCopyBuffer(cmdBuffer, srcBuffer.GetBuffer(), dstBuffer.GetBuffer(), 1, &copyRegion);
 
-	vkEndCommandBuffer(commandBuffer);
+	if (!EndSingleUseCmdBuffer(cmdBuffer))
+	{
+		std::cout << "Failed to end command buffer for image layout transition\n";
+		return;
+	}
+}
 
-	VkSubmitInfo submitInfo = {};
-	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submitInfo.commandBufferCount = 1;
-	submitInfo.pCommandBuffers = &commandBuffer;
+bool VKBase::CopyBufferToImage(const VKBuffer& buffer, VkImage image, unsigned int width, unsigned int height)
+{
+	VkCommandBuffer cmdBuffer = BeginSingleUseCmdBuffer();
 
-	vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
-	vkQueueWaitIdle(graphicsQueue);
+	if (cmdBuffer == VK_NULL_HANDLE)
+	{
+		std::cout << "Failed to copy buffer, command buffer null handle\n";
+		return false;
+	}
 
-	vkFreeCommandBuffers(device, cmdPool, 1, &commandBuffer);
+	VkBufferImageCopy copy = {};
+	copy.bufferOffset = 0;
+	copy.bufferRowLength = 0;
+	copy.bufferImageHeight = 0;
+	copy.imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	copy.imageSubresource.baseArrayLayer = 0;
+	copy.imageSubresource.layerCount = 1;
+	copy.imageSubresource.mipLevel = 0;
+	copy.imageOffset = { 0, 0, 0 };
+	copy.imageExtent = { width, height, 1 };
+
+	vkCmdCopyBufferToImage(cmdBuffer, buffer.GetBuffer(), image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
+
+
+	if (!EndSingleUseCmdBuffer(cmdBuffer))
+	{
+		std::cout << "Failed to end command buffer for image layout transition\n";
+		return false;
+	}
+
+	return true;
+}
+
+bool VKBase::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout currentLayout, VkImageLayout newLayout)
+{
+	VkCommandBuffer cmdBuffer = BeginSingleUseCmdBuffer();
+
+	if (cmdBuffer == VK_NULL_HANDLE)
+	{
+		std::cout << "Failed to transition image layout, command buffer null handle\n";
+		return false;
+	}
+
+	VkImageMemoryBarrier barrier = {};
+	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	barrier.oldLayout = currentLayout;
+	barrier.newLayout = newLayout;
+	barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+	barrier.image = image;
+	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	barrier.subresourceRange.baseArrayLayer = 0;
+	barrier.subresourceRange.baseMipLevel = 0;
+	barrier.subresourceRange.layerCount = 1;
+	barrier.subresourceRange.levelCount = 1;
+
+	VkPipelineStageFlags srcStage;
+	VkPipelineStageFlags dstStage;
+
+	if (currentLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+	{
+		// We don't need to wait on anything to perform the transfer so specify the earliest stage, mask can be 0
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+		srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	}
+	else if (currentLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL)
+	{
+		// The shader reads in the fragment shader should wait on the transfer writes
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+		srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;		// Assuming we first use the image on the fragment shader. Would have to change if used on the vertex shader first
+	}
+
+
+	vkCmdPipelineBarrier(cmdBuffer, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+	if (!EndSingleUseCmdBuffer(cmdBuffer))
+	{
+		std::cout << "Failed to end command buffer for image layout transition\n";
+		return false;
+	}
+
+	return true;
 }
 
 bool VKBase::CreateInstance()

@@ -15,6 +15,8 @@ public:
 
 	void RecreateSwapchain(unsigned int width, unsigned int height);
 	void CopyBuffer(const VKBuffer &srcBuffer, const VKBuffer &dstBuffer, unsigned int size);
+	bool CopyBufferToImage(const VKBuffer& buffer, VkImage image, unsigned int width, unsigned int height);
+	bool TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout currentLayout, VkImageLayout newLayout);
 
 	VkInstance GetInstance() const { return instance; }
 	VkPhysicalDevice GetPhysicalDevice() const { return physicalDevice; }
@@ -40,6 +42,9 @@ private:
 	bool CreateDevice(VkSurfaceKHR surface);
 	bool CreateSwapchain(unsigned int width, unsigned int height);
 	bool CreateCommandPool();
+
+	VkCommandBuffer BeginSingleUseCmdBuffer();
+	bool EndSingleUseCmdBuffer(VkCommandBuffer cmdBuffer);
 
 private:
 	bool enableValidationLayers;
