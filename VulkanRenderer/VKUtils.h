@@ -42,4 +42,5 @@ namespace vkutils
 	VkExtent2D ChooseSwapChainExtent(const VkSurfaceCapabilitiesKHR& capabilities, uint32_t width, uint32_t height);
 
 	uint32_t FindMemoryType(const VkPhysicalDeviceMemoryProperties& memProps, uint32_t typeFilter, VkMemoryPropertyFlags properties);
+	VkFormat FindSupportedFormat(VkPhysicalDevice physicalDevice, const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags flags);
 }

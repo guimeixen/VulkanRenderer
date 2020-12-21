@@ -1,6 +1,6 @@
 #version 450
 
-layout(location = 0) in vec2 inPos;
+layout(location = 0) in vec3 inPos;
 layout(location = 1) in vec2 inUv;
 layout(location = 2) in vec3 inColor;
 
@@ -18,5 +18,5 @@ void main()
 {
 	color = inColor;
 	uv = vec2(inUv.x, 1.0 - inUv.y);
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPos, 0.0, 1.0);
+    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPos, 1.0);
 }

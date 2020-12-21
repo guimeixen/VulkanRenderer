@@ -339,4 +339,24 @@ namespace vkutils
 
 		return 0;
 	}
+
+	VkFormat FindSupportedFormat(VkPhysicalDevice physicalDevice, const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags formatFeatures)
+	{
+		for (size_t i = 0; i < formats.size(); i++)
+		{
+			VkFormatProperties props;
+			vkGetPhysicalDeviceFormatProperties(physicalDevice, formats[i], &props);
+
+			if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & formatFeatures) == formatFeatures)
+			{
+				return formats[i];
+			}
+			else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & formatFeatures) == formatFeatures)
+			{
+				return formats[i];
+			}
+		}
+
+		return VK_FORMAT_UNDEFINED;
+	}
 }
