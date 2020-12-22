@@ -5,6 +5,10 @@
 #include "glm/gtc/matrix_transform.hpp"
 #include "stb_image.h"
 
+#include "assimp/scene.h"
+#include "assimp/Importer.hpp"
+#include "assimp/postprocess.h"
+
 #include <iostream>
 #include <string>
 #include <set>
@@ -18,10 +22,10 @@ VkPipelineLayout pipelineLayout;
 VKBuffer ib, vb;
 std::vector<VkDescriptorSet> descriptorSets;
 
-const std::vector<unsigned short> indices = {
+/*const std::vector<unsigned short> indices = {
 		0, 1, 2, 2, 3, 0,
 		4, 5, 6, 6, 7, 4
-};
+};*/
 
 static void FramebufferResizeCallback(GLFWwindow *window, int newWidth, int newHeight)
 {
@@ -143,7 +147,7 @@ bool CreateFramebuffers(const VKBase &base, VkRenderPass renderPass, std::vector
 	return true;
 }
 
-bool CreateCommandBuffers(const VKBase &base, VkRenderPass renderPass, VkExtent2D surfaceExtent, const std::vector<VkFramebuffer> &framebuffers, std::vector<VkCommandBuffer> &cmdBuffers)
+bool CreateCommandBuffers(const VKBase &base, VkRenderPass renderPass, VkExtent2D surfaceExtent, const std::vector<VkFramebuffer> &framebuffers, unsigned int numIndices, std::vector<VkCommandBuffer> &cmdBuffers)
 {
 	cmdBuffers.resize(framebuffers.size());
 
@@ -200,7 +204,7 @@ bool CreateCommandBuffers(const VKBase &base, VkRenderPass renderPass, VkExtent2
 		vkCmdBindVertexBuffers(cmdBuffers[i], 0, 1, vertexBuffers, offsets);
 		vkCmdBindIndexBuffer(cmdBuffers[i], ib.GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
 		vkCmdBindDescriptorSets(cmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i], 0, nullptr);
-		vkCmdDrawIndexed(cmdBuffers[i], static_cast<uint32_t>(indices.size()), 1, 0, 0, 0);
+		vkCmdDrawIndexed(cmdBuffers[i], static_cast<uint32_t>(numIndices), 1, 0, 0, 0);
 		vkCmdEndRenderPass(cmdBuffers[i]);
 
 		if (vkEndCommandBuffer(cmdBuffers[i]) != VK_SUCCESS)
@@ -356,10 +360,10 @@ int main()
 	// Load Texture
 
 	unsigned char* pixels = nullptr;
-	int width, height, channels;
-	pixels = stbi_load("Data/Textures/front.png", &width, &height, &channels, STBI_rgb_alpha);
+	int textureWidth, textureHeight, channels;
+	pixels = stbi_load("Data/Models/trash_can_d.jpg", &textureWidth, &textureHeight, &channels, STBI_rgb_alpha);
 
-	unsigned int textureSize = (unsigned int)(width * height * 4);
+	unsigned int textureSize = (unsigned int)(textureWidth * textureHeight * 4);
 
 	if (!pixels)
 	{
@@ -382,8 +386,8 @@ int main()
 	VkImageCreateInfo imageInfo = {};
 	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	imageInfo.arrayLayers = 1;
-	imageInfo.extent.width = static_cast<uint32_t>(width);
-	imageInfo.extent.height = static_cast<uint32_t>(height);
+	imageInfo.extent.width = static_cast<uint32_t>(textureWidth);
+	imageInfo.extent.height = static_cast<uint32_t>(textureHeight);
 	imageInfo.extent.depth = 1;
 	imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
 	imageInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -418,7 +422,7 @@ int main()
 	vkBindImageMemory(device, texImage, texMemory, 0);
 
 	base.TransitionImageLayout(texImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	base.CopyBufferToImage(texStagingBuffer, texImage, width, height);
+	base.CopyBufferToImage(texStagingBuffer, texImage, textureWidth, textureHeight);
 	base.TransitionImageLayout(texImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	texStagingBuffer.Dispose(device);
@@ -473,14 +477,14 @@ int main()
 	{
 		glm::vec3 pos;
 		glm::vec2 uv;
-		glm::vec3 color;
+		glm::vec3 normal;
 	};
 
-	const std::vector<Vertex> vertices = {
+	/*const std::vector<Vertex> vertices = {
 		/*{{-0.5f, -0.5f}, {0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}},
 		{{0.5f, -0.5f}, {1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
 		{{0.5f, 0.5f}, {1.0f, 1.0f}, {0.0f, 0.0f, 1.0f}},
-		{{-0.5f, 0.5f}, {0.0f, 1.0f}, {1.0f, 1.0f, 0.0f}},*/
+		{{-0.5f, 0.5f}, {0.0f, 1.0f}, {1.0f, 1.0f, 0.0f}},
 		{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}},
 		{{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
 		{{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}, {0.0f, 0.0f, 1.0f}},
@@ -490,34 +494,83 @@ int main()
 		{{0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
 		{{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}, {0.0f, 0.0f, 1.0f}},
 		{{-0.5f, 0.5f, -0.5f}, {0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}}
-	};
+	};*/
 
-	
+	// Load model
 
+	Assimp::Importer importer;
+	const aiScene* aiscene = importer.ReadFile("Data/Models/trash_can.obj", aiProcess_JoinIdenticalVertices | aiProcess_FlipUVs); //| aiProcess_GenSmoothNormals); //| aiProcess_CalcTangentSpace);
+
+	if (!aiscene || aiscene->mFlags == AI_SCENE_FLAGS_INCOMPLETE || !aiscene->mRootNode)
+	{
+		std::cout << "Failed to load model. Assimp Error: " <<  importer.GetErrorString() << '\n';
+		return 1;
+	}
+
+	std::vector<unsigned short> indices;
+	std::vector<Vertex> vertices;
 	VKBuffer vertexStagingBuffer, indexStagingBuffer;
-	vertexStagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	indexStagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(unsigned short)* indices.size(), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-	unsigned int vertexSize = vertexStagingBuffer.GetSize();
+	// Load all the model meshes
+	for (unsigned int i = 0; i < aiscene->mNumMeshes; i++)
+	{
+		const aiMesh* aimesh = aiscene->mMeshes[i];
 
-	vkMapMemory(device, vertexStagingBuffer.GetBufferMemory(), 0, vertexSize, 0, &data);
-	memcpy(data, vertices.data(), (size_t)vertexSize);
-	vkUnmapMemory(device, vertexStagingBuffer.GetBufferMemory());
+		for (unsigned int j = 0; j < aimesh->mNumFaces; j++)
+		{
+			aiFace face = aimesh->mFaces[j];
 
-	unsigned int indexSize = indexStagingBuffer.GetSize();
-	vkMapMemory(device, indexStagingBuffer.GetBufferMemory(), 0, indexSize, 0, &data);
-	memcpy(data, indices.data(), (size_t)indexSize);
-	vkUnmapMemory(device, indexStagingBuffer.GetBufferMemory());
+			for (unsigned int k = 0; k < face.mNumIndices; k++)
+			{
+				indices.push_back(face.mIndices[k]);
+			}
+		}
 
 
-	vb.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	ib.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(unsigned short)* indices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		vertices.resize(aimesh->mNumVertices);
 
-	base.CopyBuffer(vertexStagingBuffer, vb, vertexSize);
-	base.CopyBuffer(indexStagingBuffer, ib, indexSize);
+		for (unsigned int j = 0; j < aimesh->mNumVertices; j++)
+		{
+			Vertex& v = vertices[j];
 
-	vertexStagingBuffer.Dispose(device);
-	indexStagingBuffer.Dispose(device);
+			v.pos = glm::vec3(aimesh->mVertices[j].x, aimesh->mVertices[j].y, aimesh->mVertices[j].z);
+			v.normal = glm::vec3(aimesh->mNormals[j].x, aimesh->mNormals[j].y, aimesh->mNormals[j].z);
+
+			if (aimesh->mTextureCoords[0])
+			{
+				// A vertex can contain up to 8 different texture coordinates. We thus make the assumption that we won't
+				// use models where a vertex can have multiple texture coordinates so we always take the first set (0).
+				v.uv = glm::vec2(aimesh->mTextureCoords[0][j].x, aimesh->mTextureCoords[0][j].y);
+			}
+			else
+			{
+				v.uv = glm::vec2(0.0f, 0.0f);
+			}
+		}
+
+		vertexStagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), vertices.size() * sizeof(Vertex), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		indexStagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), indices.size() * sizeof(unsigned short), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+		unsigned int vertexSize = vertexStagingBuffer.GetSize();
+
+		vkMapMemory(device, vertexStagingBuffer.GetBufferMemory(), 0, vertexSize, 0, &data);
+		memcpy(data, vertices.data(), (size_t)vertexSize);
+		vkUnmapMemory(device, vertexStagingBuffer.GetBufferMemory());
+
+		unsigned int indexSize = indexStagingBuffer.GetSize();
+		vkMapMemory(device, indexStagingBuffer.GetBufferMemory(), 0, indexSize, 0, &data);
+		memcpy(data, indices.data(), (size_t)indexSize);
+		vkUnmapMemory(device, indexStagingBuffer.GetBufferMemory());
+
+		vb.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(Vertex)* vertices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		ib.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(unsigned short)* indices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+		base.CopyBuffer(vertexStagingBuffer, vb, vertexSize);
+		base.CopyBuffer(indexStagingBuffer, ib, indexSize);
+
+		vertexStagingBuffer.Dispose(device);
+		indexStagingBuffer.Dispose(device);
+	}
 
 
 	struct CameraUBO
@@ -651,7 +704,7 @@ int main()
 	attribDesc[2].binding = 0;
 	attribDesc[2].format = VK_FORMAT_R32G32B32_SFLOAT;
 	attribDesc[2].location = 2;
-	attribDesc[2].offset = offsetof(Vertex, color);
+	attribDesc[2].offset = offsetof(Vertex, normal);
 
 	VKShader shader;
 	shader.LoadShader(device, "Data/Shaders/shader_tex_vert.spv", "Data/Shaders/shader_tex_frag.spv");
@@ -779,7 +832,7 @@ int main()
 	std::cout << "Create pipeline\n";
 	
 
-	if (!CreateCommandBuffers(base, renderPass, surfaceExtent, framebuffers, cmdBuffers))
+	if (!CreateCommandBuffers(base, renderPass, surfaceExtent, framebuffers, indices.size(), cmdBuffers))
 		return 1;
 	
 
@@ -816,7 +869,7 @@ int main()
 			base.RecreateSwapchain(width, height);
 			CreateRenderPass(base, renderPass, depthFormat);
 			CreateFramebuffers(base, renderPass, framebuffers, depthImageView);
-			CreateCommandBuffers(base, renderPass, base.GetSurfaceExtent(), framebuffers, cmdBuffers);
+			CreateCommandBuffers(base, renderPass, base.GetSurfaceExtent(), framebuffers, indices.size(), cmdBuffers);
 
 			// We can't present so go to the next iteration
 			continue;
@@ -828,9 +881,10 @@ int main()
 		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
 		CameraUBO ubo = {};
-		ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(20.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+		ubo.model = glm::mat4(1.0f);
+		//ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(20.0f), glm::vec3(0.0f, 0.0f, 1.0f));
 		//ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(-180.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-		ubo.view = glm::lookAt(glm::vec3(1.0f, 1.0f, 1.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		ubo.view = glm::lookAt(glm::vec3(0.0f, 0.5f, 1.5f), glm::vec3(0.0f, 0.5f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		ubo.proj = glm::perspective(glm::radians(85.0f), (float)width / height, 0.1f, 10.0f);
 		ubo.proj[1][1] *= -1;
 
@@ -901,7 +955,7 @@ int main()
 			base.RecreateSwapchain(width, height);
 			CreateRenderPass(base, renderPass, depthFormat);
 			CreateFramebuffers(base, renderPass, framebuffers, depthImageView);
-			CreateCommandBuffers(base, renderPass, base.GetSurfaceExtent(), framebuffers, cmdBuffers);
+			CreateCommandBuffers(base, renderPass, base.GetSurfaceExtent(), framebuffers, indices.size(), cmdBuffers);
 		}
 
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;

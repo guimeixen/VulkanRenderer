@@ -17,6 +17,6 @@ layout(binding = 0) uniform CameraUBO
 void main()
 {
 	color = inColor;
-	uv = vec2(inUv.x, 1.0 - inUv.y);
+	uv = vec2(inUv.x, inUv.y);
     gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPos, 1.0);
 }
