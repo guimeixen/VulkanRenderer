@@ -136,6 +136,8 @@ bool VKBase::EndSingleUseCmdBuffer(VkCommandBuffer cmdBuffer)
 	vkQueueWaitIdle(graphicsQueue);
 
 	vkFreeCommandBuffers(device, cmdPool, 1, &cmdBuffer);
+
+	return true;
 }
 
 void VKBase::CopyBuffer(const VKBuffer& srcBuffer, const VKBuffer& dstBuffer, unsigned int size)

@@ -7,6 +7,7 @@
 VKBuffer::VKBuffer()
 {
 	buffer = VK_NULL_HANDLE;
+	bufferMemory = VK_NULL_HANDLE;
 	memReqs = {};
 	size = 0;
 }

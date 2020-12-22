@@ -1,5 +1,8 @@
 #include "VKBase.h"
 #include "VKShader.h"
+#include "Model.h"
+#include "VertexTypes.h"
+#include "VKTexture2D.h"
 
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
@@ -19,13 +22,9 @@ unsigned int width = 640;
 unsigned int height = 480;
 VkPipeline pipeline;
 VkPipelineLayout pipelineLayout;
-VKBuffer ib, vb;
 std::vector<VkDescriptorSet> descriptorSets;
 
-/*const std::vector<unsigned short> indices = {
-		0, 1, 2, 2, 3, 0,
-		4, 5, 6, 6, 7, 4
-};*/
+Model model;
 
 static void FramebufferResizeCallback(GLFWwindow *window, int newWidth, int newHeight)
 {
@@ -187,7 +186,7 @@ bool CreateCommandBuffers(const VKBase &base, VkRenderPass renderPass, VkExtent2
 		renderBeginPassInfo.clearValueCount = 2;
 		renderBeginPassInfo.pClearValues = clearValues;
 
-		VkBuffer vertexBuffers[] = { vb.GetBuffer() };
+		VkBuffer vertexBuffers[] = { model.GetVertexBuffer().GetBuffer() };
 		VkDeviceSize offsets[] = { 0 };
 
 		VkViewport viewport = {};
@@ -202,7 +201,7 @@ bool CreateCommandBuffers(const VKBase &base, VkRenderPass renderPass, VkExtent2
 		vkCmdSetViewport(cmdBuffers[i], 0, 1, &viewport);
 		vkCmdBindPipeline(cmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 		vkCmdBindVertexBuffers(cmdBuffers[i], 0, 1, vertexBuffers, offsets);
-		vkCmdBindIndexBuffer(cmdBuffers[i], ib.GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
+		vkCmdBindIndexBuffer(cmdBuffers[i], model.GetIndexBuffer().GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
 		vkCmdBindDescriptorSets(cmdBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSets[i], 0, nullptr);
 		vkCmdDrawIndexed(cmdBuffers[i], static_cast<uint32_t>(numIndices), 1, 0, 0, 0);
 		vkCmdEndRenderPass(cmdBuffers[i]);
@@ -256,74 +255,16 @@ int main()
 	VkSurfaceFormatKHR surfaceFormat = base.GetSurfaceFormat();
 
 	// Depth texture
+	TextureParams depthTextureParams = {};
+	depthTextureParams.format = vkutils::FindSupportedFormat(base.GetPhysicalDevice(), { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT }, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-	VkImage depthImage;
-	VkImageView depthImageView;
-	VkDeviceMemory depthImageMemory;
+	VKTexture2D depthTexture;
+	depthTexture.CreateDepthTexture(base, depthTextureParams, base.GetSurfaceExtent().width, base.GetSurfaceExtent().height);
 
-	VkFormat depthFormat = vkutils::FindSupportedFormat(base.GetPhysicalDevice(), { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT }, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
 
-	VkImageCreateInfo depthImageInfo = {};
-	depthImageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	depthImageInfo.arrayLayers = 1;
-	depthImageInfo.extent.width = static_cast<uint32_t>(base.GetSurfaceExtent().width);
-	depthImageInfo.extent.height = static_cast<uint32_t>(base.GetSurfaceExtent().height);
-	depthImageInfo.extent.depth = 1;
-	depthImageInfo.format = depthFormat;
-	depthImageInfo.imageType = VK_IMAGE_TYPE_2D;
-	depthImageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	depthImageInfo.mipLevels = 1;
-	depthImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	depthImageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-	depthImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	depthImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-	depthImageInfo.flags = 0;
-
-	if (vkCreateImage(device, &depthImageInfo, nullptr, &depthImage) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create depth image\n";
+	if (!CreateRenderPass(base, renderPass, depthTexture.GetFormat()))
 		return 1;
-	}
-
-	VkMemoryRequirements depthImageMemReqs;
-	vkGetImageMemoryRequirements(device, depthImage, &depthImageMemReqs);
-
-	VkMemoryAllocateInfo imgAllocInfo = {};
-	imgAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	imgAllocInfo.memoryTypeIndex = vkutils::FindMemoryType(base.GetPhysicalDeviceMemoryProperties(), depthImageMemReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	imgAllocInfo.allocationSize = depthImageMemReqs.size;
-
-	if (vkAllocateMemory(device, &imgAllocInfo, nullptr, &depthImageMemory) != VK_SUCCESS)
-	{
-		std::cout << "Failed to allocate depth image memory\n";
-		return 1;
-	}
-
-	vkBindImageMemory(device, depthImage, depthImageMemory, 0);
-
-	VkImageViewCreateInfo imageViewInfo = {};
-	imageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	imageViewInfo.image = depthImage;
-	imageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	imageViewInfo.format = depthFormat;
-	imageViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-	imageViewInfo.subresourceRange.baseMipLevel = 0;
-	imageViewInfo.subresourceRange.levelCount = 1;
-	imageViewInfo.subresourceRange.baseArrayLayer = 0;
-	imageViewInfo.subresourceRange.layerCount = 1;
-
-	if (vkCreateImageView(device, &imageViewInfo, nullptr, &depthImageView) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create depth image view\n";
-		return 1;
-	}
-
-
-
-
-	if (!CreateRenderPass(base, renderPass, depthFormat))
-		return 1;
-	if (!CreateFramebuffers(base, renderPass, framebuffers, depthImageView))
+	if (!CreateFramebuffers(base, renderPass, framebuffers, depthTexture.GetImageView()))
 		return 1;
 
 	imageAvailableSemaphores.resize(MAX_FRAMES_IN_FLIGHT);
@@ -357,221 +298,13 @@ int main()
 	std::cout << "Created semaphores\n";
 
 
-	// Load Texture
+	TextureParams textureParams = {};
+	textureParams.format = VK_FORMAT_R8G8B8A8_SRGB;
 
-	unsigned char* pixels = nullptr;
-	int textureWidth, textureHeight, channels;
-	pixels = stbi_load("Data/Models/trash_can_d.jpg", &textureWidth, &textureHeight, &channels, STBI_rgb_alpha);
+	VKTexture2D texture;
+	texture.LoadFromFile("Data/Models/trash_can_d.jpg", base, textureParams);
 
-	unsigned int textureSize = (unsigned int)(textureWidth * textureHeight * 4);
-
-	if (!pixels)
-	{
-		std::cout << "Failed to load texture\n";
-		return 1;
-	}
-
-	VKBuffer texStagingBuffer;
-
-	texStagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), textureSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	
-	void* data;
-	vkMapMemory(device, texStagingBuffer.GetBufferMemory(), 0, static_cast<VkDeviceSize>(texStagingBuffer.GetSize()), 0, &data);
-	memcpy(data, pixels, static_cast<size_t>(texStagingBuffer.GetSize()));
-	vkUnmapMemory(device, texStagingBuffer.GetBufferMemory());
-
-	VkImage texImage;
-	VkDeviceMemory texMemory;
-
-	VkImageCreateInfo imageInfo = {};
-	imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-	imageInfo.arrayLayers = 1;
-	imageInfo.extent.width = static_cast<uint32_t>(textureWidth);
-	imageInfo.extent.height = static_cast<uint32_t>(textureHeight);
-	imageInfo.extent.depth = 1;
-	imageInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-	imageInfo.imageType = VK_IMAGE_TYPE_2D;
-	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	imageInfo.mipLevels = 1;
-	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
-	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-	imageInfo.flags = 0;
-
-	if (vkCreateImage(device, &imageInfo, nullptr, &texImage) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create image for texture\n";
-		return 1;
-	}
-
-	VkMemoryRequirements imageMemReqs;
-	vkGetImageMemoryRequirements(device, texImage, &imageMemReqs);
-
-	imgAllocInfo = {};
-	imgAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-	imgAllocInfo.memoryTypeIndex = vkutils::FindMemoryType(base.GetPhysicalDeviceMemoryProperties(), imageMemReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	imgAllocInfo.allocationSize = imageMemReqs.size;
-
-	if (vkAllocateMemory(device, &imgAllocInfo, nullptr, &texMemory) != VK_SUCCESS)
-	{
-		std::cout << "Failed to allocate image memory\n";
-		return 1;
-	}
-
-	vkBindImageMemory(device, texImage, texMemory, 0);
-
-	base.TransitionImageLayout(texImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	base.CopyBufferToImage(texStagingBuffer, texImage, textureWidth, textureHeight);
-	base.TransitionImageLayout(texImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-
-	texStagingBuffer.Dispose(device);
-
-	VkImageView imageView;
-
-	imageViewInfo = {};
-	imageViewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-	imageViewInfo.image = texImage;
-	imageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-	imageViewInfo.format = VK_FORMAT_R8G8B8A8_SRGB;
-	imageViewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	imageViewInfo.subresourceRange.baseMipLevel = 0;
-	imageViewInfo.subresourceRange.levelCount = 1;
-	imageViewInfo.subresourceRange.baseArrayLayer = 0;
-	imageViewInfo.subresourceRange.layerCount = 1;
-
-	if (vkCreateImageView(device, &imageViewInfo, nullptr, &imageView) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create texture image view\n";
-		return 1;
-	}
-
-	VkSamplerCreateInfo samplerInfo = {};
-	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-	samplerInfo.magFilter = VK_FILTER_LINEAR;
-	samplerInfo.minFilter = VK_FILTER_LINEAR;
-	samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	samplerInfo.anisotropyEnable = VK_FALSE;
-	samplerInfo.maxAnisotropy = 1.0f;
-	samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
-	samplerInfo.unnormalizedCoordinates = VK_FALSE;
-	samplerInfo.compareEnable = VK_FALSE;
-	samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
-	samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-	samplerInfo.mipLodBias = 0.0f;
-	samplerInfo.minLod = 0.0f;
-	samplerInfo.maxLod = 0.0f;
-
-	VkSampler sampler;
-
-	if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create sampler\n";
-		return 1;
-	}
-
-
-	struct Vertex
-	{
-		glm::vec3 pos;
-		glm::vec2 uv;
-		glm::vec3 normal;
-	};
-
-	/*const std::vector<Vertex> vertices = {
-		/*{{-0.5f, -0.5f}, {0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}},
-		{{0.5f, -0.5f}, {1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
-		{{0.5f, 0.5f}, {1.0f, 1.0f}, {0.0f, 0.0f, 1.0f}},
-		{{-0.5f, 0.5f}, {0.0f, 1.0f}, {1.0f, 1.0f, 0.0f}},
-		{{-0.5f, -0.5f, 0.0f}, {0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}},
-		{{0.5f, -0.5f, 0.0f}, {1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
-		{{0.5f, 0.5f, 0.0f}, {1.0f, 1.0f}, {0.0f, 0.0f, 1.0f}},
-		{{-0.5f, 0.5f, 0.0f}, {0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}},
-
-		{{-0.5f, -0.5f, -0.5f}, {0.0f, 0.0f}, {1.0f, 0.0f, 0.0f}},
-		{{0.5f, -0.5f, -0.5f}, {1.0f, 0.0f}, {0.0f, 1.0f, 0.0f}},
-		{{0.5f, 0.5f, -0.5f}, {1.0f, 1.0f}, {0.0f, 0.0f, 1.0f}},
-		{{-0.5f, 0.5f, -0.5f}, {0.0f, 1.0f}, {1.0f, 1.0f, 1.0f}}
-	};*/
-
-	// Load model
-
-	Assimp::Importer importer;
-	const aiScene* aiscene = importer.ReadFile("Data/Models/trash_can.obj", aiProcess_JoinIdenticalVertices | aiProcess_FlipUVs); //| aiProcess_GenSmoothNormals); //| aiProcess_CalcTangentSpace);
-
-	if (!aiscene || aiscene->mFlags == AI_SCENE_FLAGS_INCOMPLETE || !aiscene->mRootNode)
-	{
-		std::cout << "Failed to load model. Assimp Error: " <<  importer.GetErrorString() << '\n';
-		return 1;
-	}
-
-	std::vector<unsigned short> indices;
-	std::vector<Vertex> vertices;
-	VKBuffer vertexStagingBuffer, indexStagingBuffer;
-
-	// Load all the model meshes
-	for (unsigned int i = 0; i < aiscene->mNumMeshes; i++)
-	{
-		const aiMesh* aimesh = aiscene->mMeshes[i];
-
-		for (unsigned int j = 0; j < aimesh->mNumFaces; j++)
-		{
-			aiFace face = aimesh->mFaces[j];
-
-			for (unsigned int k = 0; k < face.mNumIndices; k++)
-			{
-				indices.push_back(face.mIndices[k]);
-			}
-		}
-
-
-		vertices.resize(aimesh->mNumVertices);
-
-		for (unsigned int j = 0; j < aimesh->mNumVertices; j++)
-		{
-			Vertex& v = vertices[j];
-
-			v.pos = glm::vec3(aimesh->mVertices[j].x, aimesh->mVertices[j].y, aimesh->mVertices[j].z);
-			v.normal = glm::vec3(aimesh->mNormals[j].x, aimesh->mNormals[j].y, aimesh->mNormals[j].z);
-
-			if (aimesh->mTextureCoords[0])
-			{
-				// A vertex can contain up to 8 different texture coordinates. We thus make the assumption that we won't
-				// use models where a vertex can have multiple texture coordinates so we always take the first set (0).
-				v.uv = glm::vec2(aimesh->mTextureCoords[0][j].x, aimesh->mTextureCoords[0][j].y);
-			}
-			else
-			{
-				v.uv = glm::vec2(0.0f, 0.0f);
-			}
-		}
-
-		vertexStagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), vertices.size() * sizeof(Vertex), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-		indexStagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), indices.size() * sizeof(unsigned short), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-		unsigned int vertexSize = vertexStagingBuffer.GetSize();
-
-		vkMapMemory(device, vertexStagingBuffer.GetBufferMemory(), 0, vertexSize, 0, &data);
-		memcpy(data, vertices.data(), (size_t)vertexSize);
-		vkUnmapMemory(device, vertexStagingBuffer.GetBufferMemory());
-
-		unsigned int indexSize = indexStagingBuffer.GetSize();
-		vkMapMemory(device, indexStagingBuffer.GetBufferMemory(), 0, indexSize, 0, &data);
-		memcpy(data, indices.data(), (size_t)indexSize);
-		vkUnmapMemory(device, indexStagingBuffer.GetBufferMemory());
-
-		vb.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(Vertex)* vertices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		ib.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(unsigned short)* indices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-		base.CopyBuffer(vertexStagingBuffer, vb, vertexSize);
-		base.CopyBuffer(indexStagingBuffer, ib, indexSize);
-
-		vertexStagingBuffer.Dispose(device);
-		indexStagingBuffer.Dispose(device);
-	}
-
+	model.Load("Data/Models/trash_can.obj", base);
 
 	struct CameraUBO
 	{
@@ -662,8 +395,8 @@ int main()
 
 		VkDescriptorImageInfo imageInfo = {};
 		imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		imageInfo.imageView = imageView;
-		imageInfo.sampler = sampler;
+		imageInfo.imageView = texture.GetImageView();
+		imageInfo.sampler = texture.GetSampler();
 
 		VkWriteDescriptorSet descriptorWrites[2] = {};
 		descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -832,7 +565,7 @@ int main()
 	std::cout << "Create pipeline\n";
 	
 
-	if (!CreateCommandBuffers(base, renderPass, surfaceExtent, framebuffers, indices.size(), cmdBuffers))
+	if (!CreateCommandBuffers(base, renderPass, surfaceExtent, framebuffers, model.GetIndexCount(), cmdBuffers))
 		return 1;
 	
 
@@ -867,9 +600,9 @@ int main()
 			vkFreeCommandBuffers(device, base.GetCommandPool(), static_cast<uint32_t>(cmdBuffers.size()), cmdBuffers.data());
 
 			base.RecreateSwapchain(width, height);
-			CreateRenderPass(base, renderPass, depthFormat);
-			CreateFramebuffers(base, renderPass, framebuffers, depthImageView);
-			CreateCommandBuffers(base, renderPass, base.GetSurfaceExtent(), framebuffers, indices.size(), cmdBuffers);
+			CreateRenderPass(base, renderPass, depthTexture.GetFormat());
+			CreateFramebuffers(base, renderPass, framebuffers, depthTexture.GetImageView());
+			CreateCommandBuffers(base, renderPass, base.GetSurfaceExtent(), framebuffers, model.GetIndexCount(), cmdBuffers);
 
 			// We can't present so go to the next iteration
 			continue;
@@ -881,8 +614,8 @@ int main()
 		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
 		CameraUBO ubo = {};
-		ubo.model = glm::mat4(1.0f);
-		//ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(20.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+		//ubo.model = glm::mat4(1.0f);
+		ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(20.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		//ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(-180.0f), glm::vec3(1.0f, 0.0f, 0.0f));
 		ubo.view = glm::lookAt(glm::vec3(0.0f, 0.5f, 1.5f), glm::vec3(0.0f, 0.5f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		ubo.proj = glm::perspective(glm::radians(85.0f), (float)width / height, 0.1f, 10.0f);
@@ -953,9 +686,9 @@ int main()
 			vkFreeCommandBuffers(device, base.GetCommandPool(), static_cast<uint32_t>(cmdBuffers.size()), cmdBuffers.data());
 
 			base.RecreateSwapchain(width, height);
-			CreateRenderPass(base, renderPass, depthFormat);
-			CreateFramebuffers(base, renderPass, framebuffers, depthImageView);
-			CreateCommandBuffers(base, renderPass, base.GetSurfaceExtent(), framebuffers, indices.size(), cmdBuffers);
+			CreateRenderPass(base, renderPass, depthTexture.GetFormat());
+			CreateFramebuffers(base, renderPass, framebuffers, depthTexture.GetImageView());
+			CreateCommandBuffers(base, renderPass, base.GetSurfaceExtent(), framebuffers, model.GetIndexCount(), cmdBuffers);
 		}
 
 		currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -970,17 +703,9 @@ int main()
 		ubos[i].Dispose(device);
 	}
 
-	vkDestroyImage(device, depthImage, nullptr);
-	vkFreeMemory(device, depthImageMemory, nullptr);
-	vkDestroyImageView(device, depthImageView, nullptr);
-
-	vkDestroyImage(device, texImage, nullptr);
-	vkDestroyImageView(device, imageView, nullptr);
-	vkDestroySampler(device, sampler, nullptr);
-	vkFreeMemory(device, texMemory, nullptr);
-
-	vb.Dispose(device);
-	ib.Dispose(device);
+	depthTexture.Dispose(device);
+	texture.Dispose(device);
+	model.Dispose(device);
 
 	vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 
