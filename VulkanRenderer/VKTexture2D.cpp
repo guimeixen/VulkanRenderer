@@ -278,7 +278,7 @@ bool VKTexture2D::CreateSampler(VkDevice device)
 	return true;
 }
 
-bool VKTexture2D::CreateDepthTexture(VKBase& base, const TextureParams& textureParams, unsigned int width, unsigned int height)
+bool VKTexture2D::CreateDepthTexture(const VKBase& base, const TextureParams& textureParams, unsigned int width, unsigned int height)
 {
 	params = textureParams;
 	textureType = TextureType::TEXTURE_2D;

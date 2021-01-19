@@ -24,7 +24,7 @@ bool VKBuffer::Create(VKBase *base, unsigned int size, VkBufferUsageFlags usage,
 		if (minUBOAlignment > 0)
 			alignedUBOSize = (alignedUBOSize + minUBOAlignment - 1) & ~(minUBOAlignment - 1);
 
-		this->size = alignedUBOSize;
+		this->size = static_cast<unsigned int>(alignedUBOSize);
 	}
 	else
 	{

@@ -151,6 +151,7 @@
     <ClCompile Include="stb.cpp" />
     <ClCompile Include="VKBase.cpp" />
     <ClCompile Include="VKBuffer.cpp" />
+    <ClCompile Include="VKRenderer.cpp" />
     <ClCompile Include="VKShader.cpp" />
     <ClCompile Include="VKTexture2D.cpp" />
     <ClCompile Include="VKUtils.cpp" />
@@ -160,6 +161,7 @@
     <ClInclude Include="VertexTypes.h" />
     <ClInclude Include="VKBase.h" />
     <ClInclude Include="VKBuffer.h" />
+    <ClInclude Include="VKRenderer.h" />
     <ClInclude Include="VKShader.h" />
     <ClInclude Include="VKTexture2D.h" />
     <ClInclude Include="VKUtils.h" />
