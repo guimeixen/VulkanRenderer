@@ -1,3 +1,6 @@
+#include "Window.h"
+#include "Input.h"
+#include "Camera.h"
 #include "VKRenderer.h"
 #include "VKShader.h"
 #include "Model.h"
@@ -6,11 +9,6 @@
 
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
-#include "stb_image.h"
-
-#include "assimp/scene.h"
-#include "assimp/Importer.hpp"
-#include "assimp/postprocess.h"
 
 #include <iostream>
 #include <string>
@@ -35,32 +33,14 @@ VkDescriptorSet skyboxSet;
 
 Model model;
 
-static void FramebufferResizeCallback(GLFWwindow *window, int newWidth, int newHeight)
-{
-	width = newWidth;
-	height = newHeight;
-}
-
 int main()
 {
-	if (glfwInit() != GLFW_TRUE)
-	{
-		std::cout << "Failed to initialize GLFW\n";
-		return 1;
-	}
-	else
-	{
-		std::cout << "GLFW successfuly initialized\n";
-	}
-
-	glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-	GLFWwindow *window = glfwCreateWindow((int)width, (int)height, "VulkanRenderer", nullptr, nullptr);
-
-	glfwSetWindowPos(window, 400, 100);
-	glfwSetFramebufferSizeCallback(window, FramebufferResizeCallback);
+	InputManager inputManager;
+	Window window;
+	window.Init(&inputManager, width, height);
 
 	VKRenderer renderer;
-	if (!renderer.Init(window, width, height))
+	if (!renderer.Init(window.GetHandle(), width, height))
 	{
 		glfwTerminate();
 		return 1;
@@ -521,23 +501,36 @@ int main()
 		return 1;
 	}
 
-	while (!glfwWindowShouldClose(window))
+	float lastTime = 0.0f;
+	float deltaTime = 0.0f;
+
+	Camera camera;
+	camera.SetPosition(glm::vec3(0.0f, 0.5f, 1.5f));
+	camera.SetProjectionMatrix(85.0f, width, height, 0.1f, 10.0f);
+
+	while (!glfwWindowShouldClose(window.GetHandle()))
 	{
-		glfwPollEvents();
+		window.UpdateInput();
+
+		double currentTime = glfwGetTime();
+		deltaTime = (float)currentTime - lastTime;
+		lastTime = (float)currentTime;
+
+		camera.Update(deltaTime, true, true);
 
 		renderer.BeginFrame();
 
 		static auto startTime = std::chrono::high_resolution_clock::now();
 
-		auto currentTime = std::chrono::high_resolution_clock::now();
-		float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+		auto curTime = std::chrono::high_resolution_clock::now();
+		float time = std::chrono::duration<float, std::chrono::seconds::period>(curTime - startTime).count();
 
 		CameraUBO ubo = {};
 		//ubo.model = glm::mat4(1.0f);
 		ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(20.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 		//ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(-180.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-		ubo.view = glm::lookAt(glm::vec3(0.0f, 0.5f, 1.5f), glm::vec3(0.0f, 0.5f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-		ubo.proj = glm::perspective(glm::radians(85.0f), (float)width / height, 0.1f, 10.0f);
+		ubo.view = camera.GetViewMatrix();
+		ubo.proj = camera.GetProjectionMatrix();
 		ubo.proj[1][1] *= -1;
 
 		void* data;
