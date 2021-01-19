@@ -71,8 +71,8 @@ bool Model::Load(const std::string& path, VKBase &base)
 
 		VkDevice device = base.GetDevice();
 
-		vertexStagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), vertices.size() * sizeof(Vertex), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-		indexStagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), indices.size() * sizeof(unsigned short), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		vertexStagingBuffer.Create(&base, vertices.size() * sizeof(Vertex), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+		indexStagingBuffer.Create(&base, indices.size() * sizeof(unsigned short), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
 		unsigned int vertexSize = vertexStagingBuffer.GetSize();
 
@@ -86,8 +86,8 @@ bool Model::Load(const std::string& path, VKBase &base)
 		memcpy(data, indices.data(), (size_t)indexSize);
 		vkUnmapMemory(device, indexStagingBuffer.GetBufferMemory());
 
-		vertexBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		indexBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), sizeof(unsigned short) * indices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		vertexBuffer.Create(&base, sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		indexBuffer.Create(&base, sizeof(unsigned short) * indices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 		base.CopyBuffer(vertexStagingBuffer, vertexBuffer, vertexSize);
 		base.CopyBuffer(indexStagingBuffer, indexBuffer, indexSize);

@@ -19,15 +19,11 @@ VKTexture2D::VKTexture2D()
 bool VKTexture2D::LoadFromFile(const std::string& path, VKBase &base, const TextureParams& textureParams)
 {
 	params = textureParams;
+	textureType = TextureType::TEXTURE_2D;
 
 	unsigned char* pixels = nullptr;
 	int textureWidth, textureHeight, channels;
 	pixels = stbi_load(path.c_str(), &textureWidth, &textureHeight, &channels, STBI_rgb_alpha);
-
-	width = static_cast<unsigned int>(textureWidth);
-	height = static_cast<unsigned int>(textureHeight);
-
-	unsigned int textureSize = width * height * 4;
 
 	if (!pixels)
 	{
@@ -35,11 +31,16 @@ bool VKTexture2D::LoadFromFile(const std::string& path, VKBase &base, const Text
 		return false;
 	}
 
+	width = static_cast<unsigned int>(textureWidth);
+	height = static_cast<unsigned int>(textureHeight);
+
+	unsigned int textureSize = width * height * 4 * sizeof(unsigned char);	
+
 	VKBuffer stagingBuffer;
 
 	VkDevice device = base.GetDevice();
 
-	stagingBuffer.Create(device, base.GetPhysicalDeviceMemoryProperties(), textureSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	stagingBuffer.Create(&base, textureSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
 	void* data;
 	vkMapMemory(device, stagingBuffer.GetBufferMemory(), 0, static_cast<VkDeviceSize>(stagingBuffer.GetSize()), 0, &data);
@@ -68,6 +69,102 @@ bool VKTexture2D::LoadFromFile(const std::string& path, VKBase &base, const Text
 	base.TransitionImageLayout(image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
 	base.CopyBufferToImage(stagingBuffer, image, textureWidth, textureHeight);
 	base.TransitionImageLayout(image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+	stagingBuffer.Dispose(device);
+
+	if (!CreateImageView(device, VK_IMAGE_ASPECT_COLOR_BIT))
+		return false;
+	if (!CreateSampler(device))
+		return false;
+
+	return true;
+}
+
+bool VKTexture2D::LoadCubemapFromFiles(const std::vector<std::string>& facesPath, VKBase& base, const TextureParams& textureParams)
+{
+	params = textureParams;
+	textureType = TextureType::TEXTURE_CUBE;
+
+	unsigned char* facesPixels[6] = {};
+	int textureWidth = 0;
+	int textureHeight = 0;
+	int channels = 0;
+	int previousWidth = 0;
+	int previouesHeight = 0;
+
+	for (size_t i = 0; i < 6; i++)
+	{
+		// Make sure all faces have the same dimensions
+		if (textureWidth != previousWidth)
+		{
+			std::cout << "Cubemap face " << i << " width different than the others\n";
+			return false;
+		}
+		if (textureHeight != previouesHeight)
+		{
+			std::cout << "Cubemap face " << i << " height different than the others\n";
+			return false;
+		}
+
+		facesPixels[i] = stbi_load(facesPath[i].c_str(), &textureWidth, &textureHeight, &channels, STBI_rgb_alpha);
+
+		if (!facesPixels[i])
+		{
+			std::cout << "Failed to load cubemap face: " << facesPath[i] << '\n';
+			return false;
+		}
+
+		previousWidth = textureWidth;
+		previouesHeight = textureHeight;
+	}
+
+	width = static_cast<unsigned int>(textureWidth);
+	height = static_cast<unsigned int>(textureHeight);
+
+	unsigned int textureSize = width * height * 4 * 6 * sizeof(unsigned char);
+
+	VKBuffer stagingBuffer;
+
+	VkDevice device = base.GetDevice();
+
+	stagingBuffer.Create(&base, textureSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	void* data;
+	vkMapMemory(device, stagingBuffer.GetBufferMemory(), 0, static_cast<VkDeviceSize>(stagingBuffer.GetSize()), 0, &data);
+
+	unsigned int offset = 0;
+	unsigned int increase = width * height * 4 * sizeof(unsigned char);		// Increase by the size of one texture every loop iteration
+	for (size_t i = 0; i < 6; i++)
+	{
+		void* ptr = (char*)data + offset;
+		memcpy(ptr, facesPixels[i], static_cast<size_t>(increase));
+		offset += increase;
+	}
+
+	vkUnmapMemory(device, stagingBuffer.GetBufferMemory());
+
+	if (!CreateImage(device))
+		return false;
+
+	VkMemoryRequirements imageMemReqs;
+	vkGetImageMemoryRequirements(device, image, &imageMemReqs);
+
+	VkMemoryAllocateInfo imgAllocInfo = {};
+	imgAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	imgAllocInfo.memoryTypeIndex = vkutils::FindMemoryType(base.GetPhysicalDeviceMemoryProperties(), imageMemReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	imgAllocInfo.allocationSize = imageMemReqs.size;
+
+	if (vkAllocateMemory(device, &imgAllocInfo, nullptr, &memory) != VK_SUCCESS)
+	{
+		std::cout << "Failed to allocate cubemap image memory\n";
+		return false;
+	}
+
+	vkBindImageMemory(device, image, memory, 0);
+
+	base.TransitionImageLayout(image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 6);
+	base.CopyBufferToCubemapImage(stagingBuffer, image, textureWidth, textureHeight);
+	base.TransitionImageLayout(image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 6);
 
 	stagingBuffer.Dispose(device);
 
@@ -109,6 +206,12 @@ bool VKTexture2D::CreateImage(VkDevice device)
 	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 	imageInfo.flags = 0;
 
+	if (textureType == TextureType::TEXTURE_CUBE)
+	{
+		imageInfo.arrayLayers = 6;
+		imageInfo.flags = VK_IMAGE_CREATE_CUBE_COMPATIBLE_BIT;
+	}
+
 	if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS)
 	{
 		std::cout << "Failed to create image for texture\n";
@@ -130,6 +233,12 @@ bool VKTexture2D::CreateImageView(VkDevice device, VkImageAspectFlags imageAspec
 	imageViewInfo.subresourceRange.levelCount = 1;
 	imageViewInfo.subresourceRange.baseArrayLayer = 0;
 	imageViewInfo.subresourceRange.layerCount = 1;
+
+	if (textureType == TextureType::TEXTURE_CUBE)
+	{
+		imageViewInfo.viewType = VK_IMAGE_VIEW_TYPE_CUBE;
+		imageViewInfo.subresourceRange.layerCount = 6;
+	}
 
 	if (vkCreateImageView(device, &imageViewInfo, nullptr, &imageView) != VK_SUCCESS)
 	{
@@ -172,6 +281,7 @@ bool VKTexture2D::CreateSampler(VkDevice device)
 bool VKTexture2D::CreateDepthTexture(VKBase& base, const TextureParams& textureParams, unsigned int width, unsigned int height)
 {
 	params = textureParams;
+	textureType = TextureType::TEXTURE_2D;
 
 	VkImageCreateInfo depthImageInfo = {};
 	depthImageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;

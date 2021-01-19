@@ -2,12 +2,14 @@
 
 #include <vulkan/vulkan.h>
 
+class VKBase;
+
 class VKBuffer
 {
 public:
 	VKBuffer();
 
-	bool Create(VkDevice device, VkPhysicalDeviceMemoryProperties memProperties, unsigned int size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memoryPropertyFlags);
+	bool Create(VKBase *base, unsigned int size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memoryPropertyFlags);
 	void Dispose(VkDevice device);
 
 	VkBuffer GetBuffer() const { return buffer; }

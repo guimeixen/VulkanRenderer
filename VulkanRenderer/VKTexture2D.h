@@ -4,6 +4,12 @@
 
 #include <string>
 
+enum class TextureType {
+	TEXTURE_2D,
+	TEXTURE_3D,
+	TEXTURE_CUBE
+};
+
 struct TextureParams {
 	VkFormat format;
 };
@@ -14,6 +20,7 @@ public:
 	VKTexture2D();
 
 	bool LoadFromFile(const std::string &path, VKBase &base, const TextureParams &textureParams);
+	bool LoadCubemapFromFiles(const std::vector<std::string>& facesPath, VKBase& base, const TextureParams& textureParams);
 	bool CreateDepthTexture(VKBase &base, const TextureParams& textureParams, unsigned int width, unsigned int height);
 	void Dispose(VkDevice device);
 
@@ -35,4 +42,5 @@ private:
 	TextureParams params;
 	unsigned int width;
 	unsigned int height;
+	TextureType textureType;
 };

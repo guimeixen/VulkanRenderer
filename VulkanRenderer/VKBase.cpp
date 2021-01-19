@@ -182,7 +182,9 @@ bool VKBase::CopyBufferToImage(const VKBuffer& buffer, VkImage image, unsigned i
 	copy.imageSubresource.layerCount = 1;
 	copy.imageSubresource.mipLevel = 0;
 	copy.imageOffset = { 0, 0, 0 };
-	copy.imageExtent = { width, height, 1 };
+	copy.imageExtent.width = static_cast<uint32_t>(width);
+	copy.imageExtent.height = static_cast<uint32_t>(height);
+	copy.imageExtent.depth = 1;
 
 	vkCmdCopyBufferToImage(cmdBuffer, buffer.GetBuffer(), image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &copy);
 
@@ -196,7 +198,47 @@ bool VKBase::CopyBufferToImage(const VKBuffer& buffer, VkImage image, unsigned i
 	return true;
 }
 
-bool VKBase::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout currentLayout, VkImageLayout newLayout)
+bool VKBase::CopyBufferToCubemapImage(const VKBuffer& buffer, VkImage image, unsigned int width, unsigned int height)
+{
+	VkCommandBuffer cmdBuffer = BeginSingleUseCmdBuffer();
+
+	if (cmdBuffer == VK_NULL_HANDLE)
+	{
+		std::cout << "Failed to copy buffer, command buffer null handle\n";
+		return false;
+	}
+
+	VkBufferImageCopy copy[6] = {};
+
+	VkDeviceSize offset = 0;
+
+	for (size_t i = 0; i < 6; i++)
+	{
+		copy[i].bufferOffset = offset;
+		copy[i].imageSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		copy[i].imageSubresource.baseArrayLayer = i;
+		copy[i].imageSubresource.layerCount = 1;
+		copy[i].imageSubresource.mipLevel = 0;
+		copy[i].imageExtent.width = static_cast<uint32_t>(width);
+		copy[i].imageExtent.height = static_cast<uint32_t>(height);
+		copy[i].imageExtent.depth = 1;
+
+		offset += static_cast<VkDeviceSize>(width * height * 4 * sizeof(unsigned char)); // Here we assume the cubemap is RGBA8
+	}
+
+	vkCmdCopyBufferToImage(cmdBuffer, buffer.GetBuffer(), image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 6, copy);
+
+
+	if (!EndSingleUseCmdBuffer(cmdBuffer))
+	{
+		std::cout << "Failed to end command buffer for image layout transition\n";
+		return false;
+	}
+
+	return true;
+}
+
+bool VKBase::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout currentLayout, VkImageLayout newLayout, unsigned int layerCount)
 {
 	VkCommandBuffer cmdBuffer = BeginSingleUseCmdBuffer();
 
@@ -216,7 +258,7 @@ bool VKBase::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout
 	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	barrier.subresourceRange.baseArrayLayer = 0;
 	barrier.subresourceRange.baseMipLevel = 0;
-	barrier.subresourceRange.layerCount = 1;
+	barrier.subresourceRange.layerCount = layerCount;
 	barrier.subresourceRange.levelCount = 1;
 
 	VkPipelineStageFlags srcStage;
@@ -362,16 +404,15 @@ bool VKBase::ChoosePhysicalDevice()
 	}
 
 	VkPhysicalDeviceFeatures deviceFeatures;
-	VkPhysicalDeviceProperties deviceProperties;
 
 	vkGetPhysicalDeviceFeatures(physicalDevice, &deviceFeatures);
-	vkGetPhysicalDeviceProperties(physicalDevice, &deviceProperties);
+	vkGetPhysicalDeviceProperties(physicalDevice, &physicalDeviceProperties);
 	vkGetPhysicalDeviceMemoryProperties(physicalDevice, &physicalDeviceMemoryProperties);
 
-	std::cout << "GPU: " << deviceProperties.deviceName << '\n';
-	std::cout << "Max allocations: " << deviceProperties.limits.maxMemoryAllocationCount << '\n';
+	std::cout << "GPU: " << physicalDeviceProperties.deviceName << '\n';
+	std::cout << "Max allocations: " << physicalDeviceProperties.limits.maxMemoryAllocationCount << '\n';
 	std::cout << "Memory heaps: " << physicalDeviceMemoryProperties.memoryHeapCount << '\n';
-	std::cout << "Max push constant size: " << deviceProperties.limits.maxPushConstantsSize << '\n';
+	std::cout << "Max push constant size: " << physicalDeviceProperties.limits.maxPushConstantsSize << '\n';
 
 	if (showMemoryProperties)
 	{

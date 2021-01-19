@@ -7,7 +7,7 @@ layout(location = 2) in vec3 inColor;
 layout(location = 0) out vec3 color;
 layout(location = 1) out vec2 uv;
 
-layout(binding = 0) uniform CameraUBO
+layout(set = 0, binding = 0) uniform CameraUBO
 {
 	mat4 proj;
 	mat4 view;
