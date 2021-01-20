@@ -13,78 +13,96 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
+    <Filter Include="Header Files\Program">
+      <UniqueIdentifier>{70561621-0e21-44d7-9dd1-2a67a15cf102}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\VK">
+      <UniqueIdentifier>{bcbd86b5-c272-4561-abad-337992f2935c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files\Graphics">
+      <UniqueIdentifier>{845f3135-3a14-4708-b7f0-4f8fdb475459}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Graphics">
+      <UniqueIdentifier>{febc6b17-6bda-43d6-a666-00c3b8423e4a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Program">
+      <UniqueIdentifier>{2421a7a8-63ab-4837-9cdb-96f9f8a340a9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\VK">
+      <UniqueIdentifier>{afe44daa-6d7d-4b45-9970-a139d442ef46}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="VKUtils.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="VKShader.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="VKBase.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="VKBuffer.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="stb.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="Model.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="VKTexture2D.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="VKRenderer.cpp">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="Camera.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\Graphics</Filter>
     </ClCompile>
     <ClCompile Include="Input.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\Program</Filter>
+    </ClCompile>
+    <ClCompile Include="Model.cpp">
+      <Filter>Source Files\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="stb.cpp">
+      <Filter>Source Files\Program</Filter>
+    </ClCompile>
+    <ClCompile Include="VKBase.cpp">
+      <Filter>Source Files\VK</Filter>
+    </ClCompile>
+    <ClCompile Include="VKBuffer.cpp">
+      <Filter>Source Files\VK</Filter>
+    </ClCompile>
+    <ClCompile Include="VKRenderer.cpp">
+      <Filter>Source Files\VK</Filter>
+    </ClCompile>
+    <ClCompile Include="VKShader.cpp">
+      <Filter>Source Files\VK</Filter>
+    </ClCompile>
+    <ClCompile Include="VKTexture2D.cpp">
+      <Filter>Source Files\VK</Filter>
+    </ClCompile>
+    <ClCompile Include="VKUtils.cpp">
+      <Filter>Source Files\VK</Filter>
     </ClCompile>
     <ClCompile Include="Window.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\Program</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="VKUtils.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="VKShader.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="VKBase.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\VK</Filter>
     </ClInclude>
     <ClInclude Include="VKBuffer.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="Model.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="VKTexture2D.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="VertexTypes.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\VK</Filter>
     </ClInclude>
     <ClInclude Include="VKRenderer.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\VK</Filter>
     </ClInclude>
-    <ClInclude Include="Camera.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="VKShader.h">
+      <Filter>Header Files\VK</Filter>
+    </ClInclude>
+    <ClInclude Include="VKTexture2D.h">
+      <Filter>Header Files\VK</Filter>
+    </ClInclude>
+    <ClInclude Include="VKUtils.h">
+      <Filter>Header Files\VK</Filter>
     </ClInclude>
     <ClInclude Include="Input.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Program</Filter>
     </ClInclude>
     <ClInclude Include="Window.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Program</Filter>
+    </ClInclude>
+    <ClInclude Include="Camera.h">
+      <Filter>Header Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Model.h">
+      <Filter>Header Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="VertexTypes.h">
+      <Filter>Header Files\Graphics</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -359,4 +359,36 @@ namespace vkutils
 
 		return VK_FORMAT_UNDEFINED;
 	}
+
+	VkFormat FindSupportedDepthFormat(VkPhysicalDevice physicalDevice)
+	{
+		std::vector<VkFormat> depthFormats = {
+				VK_FORMAT_D32_SFLOAT_S8_UINT,
+				VK_FORMAT_D32_SFLOAT,
+				VK_FORMAT_D24_UNORM_S8_UINT,
+				VK_FORMAT_D16_UNORM_S8_UINT,
+				VK_FORMAT_D16_UNORM
+		};
+
+		for (size_t i = 0; i < depthFormats.size(); i++)
+		{
+			VkFormatProperties props;
+			vkGetPhysicalDeviceFormatProperties(physicalDevice, depthFormats[i], &props);
+
+			if (props.optimalTilingFeatures & VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT)
+			{
+				return depthFormats[i];
+			}
+		}
+
+		return VK_FORMAT_UNDEFINED;
+	}
+
+	bool FormatHasStencil(VkFormat format)
+	{
+		if (format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT || format == VK_FORMAT_D16_UNORM_S8_UINT)
+			return true;
+
+		return false;
+	}
 }

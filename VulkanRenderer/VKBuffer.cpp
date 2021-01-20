@@ -11,6 +11,7 @@ VKBuffer::VKBuffer()
 	bufferMemory = VK_NULL_HANDLE;
 	memReqs = {};
 	size = 0;
+	mapped = nullptr;
 }
 
 bool VKBuffer::Create(VKBase *base, unsigned int size, VkBufferUsageFlags usage, VkMemoryPropertyFlags memoryPropertyFlags)
@@ -69,4 +70,20 @@ void VKBuffer::Dispose(VkDevice device)
 		vkDestroyBuffer(device, buffer, nullptr);
 	if (bufferMemory != VK_NULL_HANDLE)
 		vkFreeMemory(device, bufferMemory, nullptr);
+}
+
+void *VKBuffer::Map(VkDevice device, VkDeviceSize offset, VkDeviceSize size)
+{
+	vkMapMemory(device, bufferMemory, offset, size, 0, &mapped);
+
+	return mapped;
+}
+
+void VKBuffer::Unmap(VkDevice device)
+{
+	if (mapped)
+	{
+		vkUnmapMemory(device, bufferMemory);
+		mapped = nullptr;
+	}
 }

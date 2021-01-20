@@ -18,23 +18,23 @@
 
 unsigned int width = 640;
 unsigned int height = 480;
-const int MAX_FRAMES_IN_FLIGHT = 2;
-VkPipeline pipeline;
-VkPipelineLayout pipelineLayout;
-//std::vector<VkDescriptorSet> descriptorSets;
-VkDescriptorSet camUBOSet[MAX_FRAMES_IN_FLIGHT];
-
-VkDescriptorSet modelSet;
-
-VkPipeline skyboxPipeline;
-VKBuffer skyboxVB;
-//std::vector<VkDescriptorSet> skyboxSets;
-VkDescriptorSet skyboxSet;
-
-Model model;
 
 int main()
 {
+	const int MAX_FRAMES_IN_FLIGHT = 2;
+	VkPipeline pipeline;
+	VkPipelineLayout pipelineLayout;
+	VkDescriptorSet camUBOSet[MAX_FRAMES_IN_FLIGHT];
+
+	VkDescriptorSet modelSet;
+
+	VkPipeline skyboxPipeline;
+	VKBuffer skyboxVB;
+	VkDescriptorSet skyboxSet;
+
+	Model model;
+
+
 	InputManager inputManager;
 	Window window;
 	window.Init(&inputManager, width, height);
@@ -51,6 +51,95 @@ int main()
 	VkDevice device = base.GetDevice();
 	VkExtent2D surfaceExtent = base.GetSurfaceExtent();
 	VkSurfaceFormatKHR surfaceFormat = base.GetSurfaceFormat();
+
+
+	TextureParams colorTexParams = {};
+	colorTexParams.format = VK_FORMAT_R8G8B8A8_UNORM;
+
+	VKTexture2D offscreenColorTexture;
+	if (!offscreenColorTexture.CreateColorTexture(base, colorTexParams, width, height))
+		return 1;
+
+	TextureParams depthTexParams = {};
+	depthTexParams.format = vkutils::FindSupportedDepthFormat(base.GetPhysicalDevice());
+
+	VKTexture2D offscreentDepthTexture;
+	if (!offscreentDepthTexture.CreateDepthTexture(base, depthTexParams, width, height))
+		return 1;
+
+	// Create render pass
+	std::array<VkAttachmentDescription, 2> attchmentDescriptions = {};
+	// Color attachment
+	attchmentDescriptions[0].format = colorTexParams.format;
+	attchmentDescriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
+	attchmentDescriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	attchmentDescriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+	attchmentDescriptions[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	attchmentDescriptions[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	attchmentDescriptions[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	attchmentDescriptions[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	// Depth attachment
+	attchmentDescriptions[1].format = depthTexParams.format;
+	attchmentDescriptions[1].samples = VK_SAMPLE_COUNT_1_BIT;
+	attchmentDescriptions[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+	attchmentDescriptions[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	attchmentDescriptions[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+	attchmentDescriptions[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+	attchmentDescriptions[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	attchmentDescriptions[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+	VkAttachmentReference colorAttachRef = {};
+	colorAttachRef.attachment = 0;
+	colorAttachRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+	VkAttachmentReference depthAttachRef = {};
+	depthAttachRef.attachment = 1;
+	depthAttachRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+	VkSubpassDescription subpassDesc = {};
+	subpassDesc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+	subpassDesc.colorAttachmentCount = 1;
+	subpassDesc.pColorAttachments = &colorAttachRef;
+	subpassDesc.pDepthStencilAttachment = &depthAttachRef;
+
+	// Use subpass dependencies for layout transitions
+	std::array<VkSubpassDependency, 2> dependencies;
+
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+	dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+	dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
+
+	VkRenderPassCreateInfo renderPassInfo = {};
+	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+	renderPassInfo.attachmentCount = static_cast<uint32_t>(attchmentDescriptions.size());
+	renderPassInfo.pAttachments = attchmentDescriptions.data();
+	renderPassInfo.subpassCount = 1;
+	renderPassInfo.pSubpasses = &subpassDesc;
+	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	renderPassInfo.pDependencies = dependencies.data();
+
+	VkRenderPass offscreenRenderPass;
+
+	if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &offscreenRenderPass) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create offscreen render pass!\n";
+		return 1;
+	}
+
+
+
 
 
 
@@ -126,12 +215,12 @@ int main()
 	poolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
 	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
 
-	poolSizes[1].descriptorCount = 2;
+	poolSizes[1].descriptorCount = 3;
 	poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
 	VkDescriptorPoolCreateInfo descPoolInfo = {};
 	descPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	descPoolInfo.maxSets = MAX_FRAMES_IN_FLIGHT + 2;
+	descPoolInfo.maxSets = MAX_FRAMES_IN_FLIGHT + 3;
 	descPoolInfo.poolSizeCount = 2;
 	descPoolInfo.pPoolSizes = poolSizes;
 
@@ -377,7 +466,7 @@ int main()
 	pipelineInfo.pColorBlendState = &colorBlending;
 	pipelineInfo.pDynamicState = &dynamicState;
 	pipelineInfo.layout = pipelineLayout;
-	pipelineInfo.renderPass = renderer.GetDefaultRenderPass();
+	pipelineInfo.renderPass = offscreenRenderPass;
 	pipelineInfo.subpass = 0;
 	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 	pipelineInfo.basePipelineIndex = -1;
@@ -440,10 +529,9 @@ int main()
 	vertexStagingBuffer.Create(&base, sizeof(skyboxVertices), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 	unsigned int vertexSize = vertexStagingBuffer.GetSize();
 
-	void* data;
-	vkMapMemory(device, vertexStagingBuffer.GetBufferMemory(), 0, vertexSize, 0, &data);
-	memcpy(data, skyboxVertices, (size_t)vertexSize);
-	vkUnmapMemory(device, vertexStagingBuffer.GetBufferMemory());
+	void* mapped = vertexStagingBuffer.Map(device, 0, vertexSize);
+	memcpy(mapped, skyboxVertices, (size_t)vertexSize);
+	vertexStagingBuffer.Unmap(device);
 
 	skyboxVB.Create(&base, sizeof(skyboxVertices), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
@@ -490,7 +578,7 @@ int main()
 	skyboxPipelineInfo.pColorBlendState = &colorBlending;
 	skyboxPipelineInfo.pDynamicState = &dynamicState;
 	skyboxPipelineInfo.layout = pipelineLayout;
-	skyboxPipelineInfo.renderPass = renderer.GetDefaultRenderPass();
+	skyboxPipelineInfo.renderPass = offscreenRenderPass;
 	skyboxPipelineInfo.subpass = 0;
 	skyboxPipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
 	skyboxPipelineInfo.basePipelineIndex = -1;
@@ -500,6 +588,112 @@ int main()
 		std::cout << "Failed to create skybox pipeline\n";
 		return 1;
 	}
+
+	// OFFSCREEN
+
+	// Quad is rendered with no buffers
+
+	VKShader quadShader;
+	quadShader.LoadShader(device, "Data/Shaders/quad_vert.spv", "Data/Shaders/quad_frag.spv");
+
+	VkPipelineShaderStageCreateInfo quadShaderStages[] = { quadShader.GetVertexStageInfo(), quadShader.GetFragmentStageInfo() };
+
+	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+	vertexInputInfo.vertexBindingDescriptionCount = 0;
+	vertexInputInfo.pVertexBindingDescriptions = nullptr;
+	vertexInputInfo.vertexAttributeDescriptionCount = 0;
+	vertexInputInfo.pVertexAttributeDescriptions = nullptr;
+
+	rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
+	rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+
+	// Change it back to LESS from the skybox pipeline
+	depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
+
+	VkGraphicsPipelineCreateInfo quadPipeInfo = {};
+	quadPipeInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+	quadPipeInfo.stageCount = 2;
+	quadPipeInfo.pStages = quadShaderStages;
+	quadPipeInfo.pVertexInputState = &vertexInputInfo;
+	quadPipeInfo.pInputAssemblyState = &inputAssembly;
+	quadPipeInfo.pViewportState = &viewportState;
+	quadPipeInfo.pRasterizationState = &rasterizer;
+	quadPipeInfo.pMultisampleState = &multisampling;
+	quadPipeInfo.pDepthStencilState = &depthStencilState;
+	quadPipeInfo.pColorBlendState = &colorBlending;
+	quadPipeInfo.pDynamicState = &dynamicState;
+	quadPipeInfo.layout = pipelineLayout;
+	quadPipeInfo.renderPass = renderer.GetDefaultRenderPass();
+	quadPipeInfo.subpass = 0;
+	quadPipeInfo.basePipelineHandle = VK_NULL_HANDLE;
+	quadPipeInfo.basePipelineIndex = -1;
+
+	VkPipeline quadPipeline;
+
+	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &quadPipeInfo, nullptr, &quadPipeline) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create skybox pipeline\n";
+		return 1;
+	}
+
+
+	
+	
+
+
+
+	setAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	setAllocInfo.descriptorPool = descriptorPool;
+	setAllocInfo.descriptorSetCount = 1;
+	setAllocInfo.pSetLayouts = &texturesSetLayout;
+
+	VkDescriptorSet quadSet;
+
+	if (vkAllocateDescriptorSets(device, &setAllocInfo, &quadSet) != VK_SUCCESS)
+	{
+		std::cout << "failed to allocate descriptor sets\n";
+		return 1;
+	}
+
+	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	imageInfo.imageView = offscreenColorTexture.GetImageView();
+	imageInfo.sampler = offscreenColorTexture.GetSampler();
+
+	descriptorWrites.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrites.dstSet = quadSet;
+	descriptorWrites.dstBinding = 0;
+	descriptorWrites.dstArrayElement = 0;
+	descriptorWrites.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	descriptorWrites.descriptorCount = 1;
+	descriptorWrites.pImageInfo = &imageInfo;
+
+	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
+
+
+	
+
+	VkImageView attachments[2];
+	attachments[0] = offscreenColorTexture.GetImageView();
+	attachments[1] = offscreentDepthTexture.GetImageView();
+
+	VkFramebufferCreateInfo fbInfo = {};
+	fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+	fbInfo.attachmentCount = 2;
+	fbInfo.height = static_cast<uint32_t>(height);
+	fbInfo.width = static_cast<uint32_t>(width);
+	fbInfo.layers = 1;
+	fbInfo.pAttachments = attachments;
+	fbInfo.renderPass = offscreenRenderPass;
+	
+	VkFramebuffer offscreenFB;
+
+	if (vkCreateFramebuffer(device, &fbInfo, nullptr, &offscreenFB) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create offscreen framebuffer!\n";
+		return 1;
+	}
+
+
 
 	float lastTime = 0.0f;
 	float deltaTime = 0.0f;
@@ -533,21 +727,50 @@ int main()
 		ubo.proj = camera.GetProjectionMatrix();
 		ubo.proj[1][1] *= -1;
 
-		void* data;
-		vkMapMemory(device, cameraUBO.GetBufferMemory(), renderer.GetCurrentFrame() * (cameraUBO.GetSize() / MAX_FRAMES_IN_FLIGHT), sizeof(CameraUBO), 0, &data);
-		memcpy(data, &ubo, sizeof(CameraUBO));
-		vkUnmapMemory(device, cameraUBO.GetBufferMemory());
+
+
+		void* mapped = cameraUBO.Map(device, renderer.GetCurrentFrame() * (cameraUBO.GetSize() / MAX_FRAMES_IN_FLIGHT), sizeof(CameraUBO));
+		memcpy(mapped, &ubo, sizeof(CameraUBO));
+		cameraUBO.Unmap(device);
 
 
 		renderer.BeginCmdRecording();
-		renderer.BeginDefaultRenderPass();
 
 		VkCommandBuffer cmdBuffer = renderer.GetCurrentCmdBuffer();
 
+		VkViewport viewport = {};
+		viewport.x = 0.0f;
+		viewport.y = 0.0f;
+		viewport.width = (float)surfaceExtent.width;
+		viewport.height = (float)surfaceExtent.height;
+		viewport.minDepth = 0.0f;
+		viewport.maxDepth = 1.0f;
+
+		vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
+
+		// Bind the camera descriptor set with the ubo
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &camUBOSet[renderer.GetCurrentFrame()], 0, nullptr);
+
+
+		// OFFSCREEN
+		
+		VkClearValue clearValues[2] = {};
+		clearValues[0].color = { 0.3f, 0.3f, 0.3f, 1.0f };
+		clearValues[1].depthStencil = { 1.0f, 0 };
+
+		VkRenderPassBeginInfo renderBeginPassInfo = {};
+		renderBeginPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		renderBeginPassInfo.renderPass = offscreenRenderPass;
+		renderBeginPassInfo.framebuffer = offscreenFB;
+		renderBeginPassInfo.renderArea.offset = { 0, 0 };
+		renderBeginPassInfo.renderArea.extent = surfaceExtent;
+		renderBeginPassInfo.clearValueCount = 2;
+		renderBeginPassInfo.pClearValues = clearValues;
+
+		vkCmdBeginRenderPass(cmdBuffer, &renderBeginPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+
 		VkBuffer vertexBuffers[] = { VK_NULL_HANDLE };
 		VkDeviceSize offsets[] = { 0 };
-
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &camUBOSet[renderer.GetCurrentFrame()], 0, nullptr);
 
 		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 		vertexBuffers[0] = model.GetVertexBuffer().GetBuffer();
@@ -562,6 +785,15 @@ int main()
 		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &skyboxSet, 0, nullptr);
 		vkCmdDraw(cmdBuffer, 36, 1, 0, 0);
 
+		vkCmdEndRenderPass(cmdBuffer);
+
+		// Normal pass
+		renderer.BeginDefaultRenderPass();
+
+		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, quadPipeline);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &quadSet, 0, nullptr);
+		vkCmdDraw(cmdBuffer, 3, 1, 0, 0);
+
 		renderer.EndDefaultRenderPass();
 		renderer.EndCmdRecording();
 
@@ -574,6 +806,15 @@ int main()
 	vkDestroyDescriptorSetLayout(device, texturesSetLayout, nullptr);
 
 	cameraUBO.Dispose(device);
+
+	offscreenColorTexture.Dispose(device);
+	offscreentDepthTexture.Dispose(device);
+
+	vkDestroyRenderPass(device, offscreenRenderPass, nullptr);
+	vkDestroyFramebuffer(device, offscreenFB, nullptr);
+
+	vkDestroyPipeline(device, quadPipeline, nullptr);
+	quadShader.Dispose(device);
 
 	cubemap.Dispose(device);
 	texture.Dispose(device);

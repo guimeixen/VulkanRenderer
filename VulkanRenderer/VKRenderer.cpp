@@ -21,7 +21,7 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 	this->height = height;
 
 	TextureParams depthTextureParams = {};
-	depthTextureParams.format = vkutils::FindSupportedFormat(base.GetPhysicalDevice(), { VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT }, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+	depthTextureParams.format = vkutils::FindSupportedDepthFormat(base.GetPhysicalDevice());
 
 	depthTexture.CreateDepthTexture(base, depthTextureParams, base.GetSurfaceExtent().width, base.GetSurfaceExtent().height);
 
@@ -242,16 +242,6 @@ void VKRenderer::BeginDefaultRenderPass()
 	renderBeginPassInfo.pClearValues = clearValues;
 
 	vkCmdBeginRenderPass(cmdBuffers[currentFrame], &renderBeginPassInfo, VK_SUBPASS_CONTENTS_INLINE);
-
-	VkViewport viewport = {};
-	viewport.x = 0.0f;
-	viewport.y = 0.0f;
-	viewport.width = (float)surfaceExtent.width;
-	viewport.height = (float)surfaceExtent.height;
-	viewport.minDepth = 0.0f;
-	viewport.maxDepth = 1.0f;
-
-	vkCmdSetViewport(cmdBuffers[currentFrame], 0, 1, &viewport);
 }
 
 void VKRenderer::EndDefaultRenderPass()

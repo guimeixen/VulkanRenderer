@@ -267,7 +267,7 @@ bool VKTexture2D::CreateSampler(VkDevice device)
 	samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 	samplerInfo.mipLodBias = 0.0f;
 	samplerInfo.minLod = 0.0f;
-	samplerInfo.maxLod = 0.0f;
+	samplerInfo.maxLod = 1.0f;
 
 	if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS)
 	{
@@ -323,7 +323,63 @@ bool VKTexture2D::CreateDepthTexture(const VKBase& base, const TextureParams& te
 
 	vkBindImageMemory(device, image, memory, 0);
 
-	if (!CreateImageView(device, VK_IMAGE_ASPECT_DEPTH_BIT))
+	VkImageAspectFlags aspect = VK_IMAGE_ASPECT_DEPTH_BIT;
+	if (vkutils::FormatHasStencil(params.format))
+		aspect |= VK_IMAGE_ASPECT_STENCIL_BIT;
+
+	if (!CreateImageView(device, aspect))
+		return false;
+
+	return true;
+}
+
+bool VKTexture2D::CreateColorTexture(const VKBase &base, const TextureParams& textureParams, unsigned int width, unsigned int height)
+{
+	params = textureParams;
+	textureType = TextureType::TEXTURE_2D;
+
+	VkImageCreateInfo imageCreateInfo = {};
+	imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+	imageCreateInfo.format = params.format;
+	imageCreateInfo.extent.width = static_cast<uint32_t>(width);
+	imageCreateInfo.extent.height = static_cast<uint32_t>(height);
+	imageCreateInfo.extent.depth = 1;
+	imageCreateInfo.mipLevels = 1;
+	imageCreateInfo.arrayLayers = 1;
+	imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+	imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+	imageCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	VkDevice device = base.GetDevice();
+
+	if (vkCreateImage(device, &imageCreateInfo, nullptr, &image) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create image\n";
+		return false;
+	}
+
+	VkMemoryRequirements imageMemReqs;
+	vkGetImageMemoryRequirements(device, image, &imageMemReqs);
+
+	VkMemoryAllocateInfo imgAllocInfo = {};
+	imgAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	imgAllocInfo.memoryTypeIndex = vkutils::FindMemoryType(base.GetPhysicalDeviceMemoryProperties(), imageMemReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	imgAllocInfo.allocationSize = imageMemReqs.size;
+
+	if (vkAllocateMemory(device, &imgAllocInfo, nullptr, &memory) != VK_SUCCESS)
+	{
+		std::cout << "Failed to allocate image memory\n";
+		return false;
+	}
+
+	vkBindImageMemory(device, image, memory, 0);
+
+	if (!CreateImageView(device, VK_IMAGE_ASPECT_COLOR_BIT))
+		return false;
+	if (!CreateSampler(device))
 		return false;
 
 	return true;

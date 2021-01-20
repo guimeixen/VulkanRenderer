@@ -43,4 +43,6 @@ namespace vkutils
 
 	uint32_t FindMemoryType(const VkPhysicalDeviceMemoryProperties& memProps, uint32_t typeFilter, VkMemoryPropertyFlags properties);
 	VkFormat FindSupportedFormat(VkPhysicalDevice physicalDevice, const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags flags);
+	VkFormat FindSupportedDepthFormat(VkPhysicalDevice physicalDevice);
+	bool FormatHasStencil(VkFormat format);
 }
