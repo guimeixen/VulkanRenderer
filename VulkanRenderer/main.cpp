@@ -2,12 +2,11 @@
 #include "Input.h"
 #include "Camera.h"
 #include "VKRenderer.h"
-#include "VKShader.h"
 #include "Model.h"
 #include "VertexTypes.h"
-#include "VKTexture2D.h"
+#include "VKFramebuffer.h"
+#include "VKPipeline.h"
 
-#include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 
 #include <iostream>
@@ -22,19 +21,13 @@ unsigned int height = 480;
 int main()
 {
 	const int MAX_FRAMES_IN_FLIGHT = 2;
-	VkPipeline pipeline;
 	VkPipelineLayout pipelineLayout;
-	VkDescriptorSet camUBOSet[MAX_FRAMES_IN_FLIGHT];
-
+	VkDescriptorSet buffersSet;
 	VkDescriptorSet modelSet;
-
-	VkPipeline skyboxPipeline;
+	VkDescriptorSet floorSet;
 	VKBuffer skyboxVB;
 	VkDescriptorSet skyboxSet;
-
 	Model model;
-
-
 	InputManager inputManager;
 	Window window;
 	window.Init(&inputManager, width, height);
@@ -53,103 +46,55 @@ int main()
 	VkSurfaceFormatKHR surfaceFormat = base.GetSurfaceFormat();
 
 
-	TextureParams colorTexParams = {};
-	colorTexParams.format = VK_FORMAT_R8G8B8A8_UNORM;
-
-	VKTexture2D offscreenColorTexture;
-	if (!offscreenColorTexture.CreateColorTexture(base, colorTexParams, width, height))
-		return 1;
-
-	TextureParams depthTexParams = {};
-	depthTexParams.format = vkutils::FindSupportedDepthFormat(base.GetPhysicalDevice());
-
-	VKTexture2D offscreentDepthTexture;
-	if (!offscreentDepthTexture.CreateDepthTexture(base, depthTexParams, width, height))
-		return 1;
-
-	// Create render pass
-	std::array<VkAttachmentDescription, 2> attchmentDescriptions = {};
-	// Color attachment
-	attchmentDescriptions[0].format = colorTexParams.format;
-	attchmentDescriptions[0].samples = VK_SAMPLE_COUNT_1_BIT;
-	attchmentDescriptions[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	attchmentDescriptions[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-	attchmentDescriptions[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	attchmentDescriptions[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	attchmentDescriptions[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	attchmentDescriptions[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	// Depth attachment
-	attchmentDescriptions[1].format = depthTexParams.format;
-	attchmentDescriptions[1].samples = VK_SAMPLE_COUNT_1_BIT;
-	attchmentDescriptions[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-	attchmentDescriptions[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	attchmentDescriptions[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-	attchmentDescriptions[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-	attchmentDescriptions[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	attchmentDescriptions[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-	VkAttachmentReference colorAttachRef = {};
-	colorAttachRef.attachment = 0;
-	colorAttachRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-	VkAttachmentReference depthAttachRef = {};
-	depthAttachRef.attachment = 1;
-	depthAttachRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-	VkSubpassDescription subpassDesc = {};
-	subpassDesc.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-	subpassDesc.colorAttachmentCount = 1;
-	subpassDesc.pColorAttachments = &colorAttachRef;
-	subpassDesc.pDepthStencilAttachment = &depthAttachRef;
-
-	// Use subpass dependencies for layout transitions
-	std::array<VkSubpassDependency, 2> dependencies;
-
-	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[0].dstSubpass = 0;
-	dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-	dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	dependencies[0].srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-	dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-	dependencies[1].srcSubpass = 0;
-	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
-	dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-	dependencies[1].dstStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
-	dependencies[1].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-	dependencies[1].dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-	dependencies[1].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
-
-	VkRenderPassCreateInfo renderPassInfo = {};
-	renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-	renderPassInfo.attachmentCount = static_cast<uint32_t>(attchmentDescriptions.size());
-	renderPassInfo.pAttachments = attchmentDescriptions.data();
-	renderPassInfo.subpassCount = 1;
-	renderPassInfo.pSubpasses = &subpassDesc;
-	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
-	renderPassInfo.pDependencies = dependencies.data();
-
-	VkRenderPass offscreenRenderPass;
-
-	if (vkCreateRenderPass(device, &renderPassInfo, nullptr, &offscreenRenderPass) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create offscreen render pass!\n";
-		return 1;
-	}
+	TextureParams colorParams = {};
+	colorParams.format = VK_FORMAT_R8G8B8A8_UNORM;
+	colorParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	colorParams.filter = VK_FILTER_LINEAR;
+	TextureParams depthParams = {};
+	depthParams.format = vkutils::FindSupportedDepthFormat(base.GetPhysicalDevice());
 
 
+	FramebufferParams fbParams = {};
+	fbParams.createColorTexture = true;
+	fbParams.createDepthTexture = true;
+	fbParams.sampleDepth = false;
+	fbParams.colorTexturesParams.push_back(colorParams);
+	fbParams.depthTexturesParams = depthParams;
 
+	VKFramebuffer offscreenFB;
+	offscreenFB.Create(base, fbParams, width, height);
+
+	FramebufferParams shadowFBParams = {};
+	shadowFBParams.createColorTexture = false;
+	shadowFBParams.createDepthTexture = true;
+	shadowFBParams.sampleDepth = true;
+	shadowFBParams.depthTexturesParams.format = VK_FORMAT_D16_UNORM;
+	shadowFBParams.depthTexturesParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+
+	VkFilter filter = vkutils::IsFormatFilterable(base.GetPhysicalDevice(), VK_FORMAT_D16_UNORM, VK_IMAGE_TILING_OPTIMAL) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+
+	shadowFBParams.depthTexturesParams.filter = filter;
+
+	VKFramebuffer shadowFB;
+	shadowFB.Create(base, shadowFBParams, 1024, 1024);
 
 
 
 	TextureParams textureParams = {};
 	textureParams.format = VK_FORMAT_R8G8B8A8_SRGB;
+	textureParams.addressMode = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	textureParams.filter = VK_FILTER_LINEAR;
 
-	VKTexture2D texture;
-	texture.LoadFromFile("Data/Models/trash_can_d.jpg", base, textureParams);
+	VKTexture2D modelTexture;
+	modelTexture.LoadFromFile("Data/Models/trash_can_d.jpg", base, textureParams);
 
 	model.Load("Data/Models/trash_can.obj", base);
+
+	Model floorModel;
+	floorModel.Load("Data/Models/floor.obj", base);
+
+	VKTexture2D floorTexture;
+	floorTexture.LoadFromFile("Data/Models/floor.jpg", base, textureParams);
 
 	// Load cubemap
 	std::vector<std::string> faces(6);
@@ -160,67 +105,87 @@ int main()
 	faces[4] = "Data/Textures/front.png";
 	faces[5] = "Data/Textures/back.png";
 
+	TextureParams cubemapParams = {};
+	cubemapParams.format = VK_FORMAT_R8G8B8A8_SRGB;
+	cubemapParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	cubemapParams.filter = VK_FILTER_LINEAR;
+
 	VKTexture2D cubemap;
-	cubemap.LoadCubemapFromFiles(faces, base, textureParams);
+	cubemap.LoadCubemapFromFiles(faces, base, cubemapParams);
 
 	struct CameraUBO
 	{
 		glm::mat4 proj;
 		glm::mat4 view;
 		glm::mat4 model;
+		glm::mat4 lightSpaceMatrix;
 	};
 
-	VkDescriptorSetLayoutBinding ubolayoutBinding = {};
-	ubolayoutBinding.binding = 0;
-	ubolayoutBinding.descriptorCount = 1;
-	ubolayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-	ubolayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	// Buffers
 
-	VkDescriptorSetLayoutCreateInfo setLayoutInfo = {};
-	setLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	setLayoutInfo.bindingCount = 1;
-	setLayoutInfo.pBindings = &ubolayoutBinding;
+	VkDescriptorSetLayoutBinding cameraLayoutBinding = {};
+	cameraLayoutBinding.binding = 0;
+	cameraLayoutBinding.descriptorCount = 1;
+	cameraLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+	cameraLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-	VkDescriptorSetLayout uboSetLayout;
+	VkDescriptorSetLayoutCreateInfo buffersSetLayoutInfo = {};
+	buffersSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	buffersSetLayoutInfo.bindingCount = 1;
+	buffersSetLayoutInfo.pBindings = &cameraLayoutBinding;
 
-	if (vkCreateDescriptorSetLayout(device, &setLayoutInfo, nullptr, &uboSetLayout) != VK_SUCCESS)
+	VkDescriptorSetLayout buffersSetLayout;
+
+	if (vkCreateDescriptorSetLayout(device, &buffersSetLayoutInfo, nullptr, &buffersSetLayout) != VK_SUCCESS)
 	{
-		std::cout << "Failed to create descriptor set layout\n";
+		std::cout << "Failed to create buffers descriptor set layout\n";
 		return 1;
 	}
 
-	VkDescriptorSetLayoutBinding textureLayoutBinding = {};
-	textureLayoutBinding.binding = 0;
-	textureLayoutBinding.descriptorCount = 1;
-	textureLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	textureLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	// Textures
 
-	setLayoutInfo.bindingCount = 1;
-	setLayoutInfo.pBindings = &textureLayoutBinding;
+	VkDescriptorSetLayoutBinding shadowMapLayoutBinding = {};
+	shadowMapLayoutBinding.binding = 0;
+	shadowMapLayoutBinding.descriptorCount = 1;
+	shadowMapLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	shadowMapLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkDescriptorSetLayoutBinding userTextureLayoutBinding = {};
+	userTextureLayoutBinding.binding = 1;
+	userTextureLayoutBinding.descriptorCount = 1;
+	userTextureLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	userTextureLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkDescriptorSetLayoutBinding texturesSetLayoutBindings[] = { shadowMapLayoutBinding, userTextureLayoutBinding };
+
+	VkDescriptorSetLayoutCreateInfo texturesSetLayoutInfo = {};
+	texturesSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	texturesSetLayoutInfo.bindingCount = 2;
+	texturesSetLayoutInfo.pBindings = texturesSetLayoutBindings;
 
 	VkDescriptorSetLayout texturesSetLayout;
 
-	if (vkCreateDescriptorSetLayout(device, &setLayoutInfo, nullptr, &texturesSetLayout) != VK_SUCCESS)
+	if (vkCreateDescriptorSetLayout(device, &texturesSetLayoutInfo, nullptr, &texturesSetLayout) != VK_SUCCESS)
 	{
-		std::cout << "Failed to create descriptor set layout\n";
+		std::cout << "Failed to create textures descriptor set layout\n";
 		return 1;
 	}
 
 	// We use a buffer with twice (or triple) the size and then offset into it so we don't have to create multiple buffers
 	// Buffer create function takes care of aligment if the buffer is a ubo
 	VKBuffer cameraUBO;
-	cameraUBO.Create(&base, sizeof(CameraUBO) * MAX_FRAMES_IN_FLIGHT, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	cameraUBO.Create(&base, sizeof(CameraUBO) * 2, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
 	VkDescriptorPoolSize poolSizes[2] = {};
-	poolSizes[0].descriptorCount = MAX_FRAMES_IN_FLIGHT;
-	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	poolSizes[0].descriptorCount = 1;
+	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 
-	poolSizes[1].descriptorCount = 3;
+	poolSizes[1].descriptorCount = 10;
 	poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
 	VkDescriptorPoolCreateInfo descPoolInfo = {};
 	descPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	descPoolInfo.maxSets = MAX_FRAMES_IN_FLIGHT + 3;
+	descPoolInfo.maxSets = 5;
 	descPoolInfo.poolSizeCount = 2;
 	descPoolInfo.pPoolSizes = poolSizes;
 
@@ -233,27 +198,19 @@ int main()
 	}
 	std::cout << "Created descriptor pool\n";
 
-
-	VkDescriptorSetLayout layouts[MAX_FRAMES_IN_FLIGHT] = { uboSetLayout, uboSetLayout };
-
 	VkDescriptorSetAllocateInfo setAllocInfo = {};
 	setAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	setAllocInfo.descriptorPool = descriptorPool;
-	setAllocInfo.descriptorSetCount = MAX_FRAMES_IN_FLIGHT;
-	setAllocInfo.pSetLayouts = layouts;
+	setAllocInfo.descriptorSetCount = 1;
+	setAllocInfo.pSetLayouts = &buffersSetLayout;
 
 
-	/*descriptorSets.resize(base.GetSwapchainImageCount());
-	if (vkAllocateDescriptorSets(device, &setAllocInfo, descriptorSets.data()) != VK_SUCCESS)
-	{
-		std::cout << "failed to allocate descriptor sets\n";
-		return 1;
-	}*/
-	if (vkAllocateDescriptorSets(device, &setAllocInfo, camUBOSet) != VK_SUCCESS)
+	if (vkAllocateDescriptorSets(device, &setAllocInfo, &buffersSet) != VK_SUCCESS)
 	{
 		std::cout << "failed to allocate descriptor sets\n";
 		return 1;
 	}
+
 	setAllocInfo.descriptorSetCount = 1;
 	setAllocInfo.pSetLayouts = &texturesSetLayout;
 	if (vkAllocateDescriptorSets(device, &setAllocInfo, &modelSet) != VK_SUCCESS)
@@ -262,12 +219,13 @@ int main()
 		return 1;
 	}
 
-	/*skyboxSets.resize(base.GetSwapchainImageCount());
-	if (vkAllocateDescriptorSets(device, &setAllocInfo, skyboxSets.data()) != VK_SUCCESS)
+	setAllocInfo.descriptorSetCount = 1;
+	setAllocInfo.pSetLayouts = &texturesSetLayout;
+	if (vkAllocateDescriptorSets(device, &setAllocInfo, &floorSet) != VK_SUCCESS)
 	{
 		std::cout << "failed to allocate descriptor sets\n";
 		return 1;
-	}*/
+	}
 
 	setAllocInfo.descriptorSetCount = 1;
 	setAllocInfo.pSetLayouts = &texturesSetLayout;
@@ -279,56 +237,110 @@ int main()
 
 	std::cout << "Allocated descriptor sets\n";
 
-	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-	{
-		VkDescriptorBufferInfo bufferInfo = {};
-		bufferInfo.buffer = cameraUBO.GetBuffer();
-		bufferInfo.offset = i * (cameraUBO.GetSize() / base.GetSwapchainImageCount());
-		bufferInfo.range = sizeof(CameraUBO);
 
-		VkWriteDescriptorSet descriptorWrites = {};
-		descriptorWrites.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-		descriptorWrites.dstSet = camUBOSet[i];
-		descriptorWrites.dstBinding = 0;
-		descriptorWrites.dstArrayElement = 0;
-		descriptorWrites.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-		descriptorWrites.descriptorCount = 1;
-		descriptorWrites.pBufferInfo = &bufferInfo;
+	VkDescriptorBufferInfo bufferInfo = {};
+	bufferInfo.buffer = cameraUBO.GetBuffer();
+	bufferInfo.offset = 0;
+	bufferInfo.range = VK_WHOLE_SIZE;
 
-		vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
-	}
+	VkWriteDescriptorSet descWrite = {};
+	descWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descWrite.dstSet = buffersSet;
+	descWrite.dstBinding = 0;
+	descWrite.dstArrayElement = 0;
+	descWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
+	descWrite.descriptorCount = 1;
+	descWrite.pBufferInfo = &bufferInfo;
 
+	vkUpdateDescriptorSets(device, 1, &descWrite, 0, nullptr);
+
+
+	// Model
 	VkDescriptorImageInfo imageInfo = {};
-	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	imageInfo.imageView = texture.GetImageView();
-	imageInfo.sampler = texture.GetSampler();
+	imageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+	imageInfo.imageView = shadowFB.GetDepthTexture().GetImageView();
+	imageInfo.sampler = shadowFB.GetDepthTexture().GetSampler();
 
-	VkWriteDescriptorSet descriptorWrites = {};
-	descriptorWrites.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	descriptorWrites.dstSet = modelSet;
-	descriptorWrites.dstBinding = 0;
-	descriptorWrites.dstArrayElement = 0;
-	descriptorWrites.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	descriptorWrites.descriptorCount = 1;
-	descriptorWrites.pImageInfo = &imageInfo;
+	VkWriteDescriptorSet descriptorWrites[2] = {};
+	descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrites[0].dstSet = modelSet;
+	descriptorWrites[0].dstBinding = 0;
+	descriptorWrites[0].dstArrayElement = 0;
+	descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	descriptorWrites[0].descriptorCount = 1;
+	descriptorWrites[0].pImageInfo = &imageInfo;
 
-	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
+	VkDescriptorImageInfo imageInfo2 = {};
+	imageInfo2.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	imageInfo2.imageView = modelTexture.GetImageView();
+	imageInfo2.sampler = modelTexture.GetSampler();
+
+	descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrites[1].dstSet = modelSet;
+	descriptorWrites[1].dstBinding = 1;
+	descriptorWrites[1].dstArrayElement = 0;
+	descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	descriptorWrites[1].descriptorCount = 1;
+	descriptorWrites[1].pImageInfo = &imageInfo2;
+
+	vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, nullptr);
+
+	// Floor
+	imageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+	imageInfo.imageView = shadowFB.GetDepthTexture().GetImageView();
+	imageInfo.sampler = shadowFB.GetDepthTexture().GetSampler();
+
+	descriptorWrites[0].dstSet = floorSet;
+	descriptorWrites[0].dstBinding = 0;
+	descriptorWrites[0].pImageInfo = &imageInfo;
+
+	imageInfo2.imageView = floorTexture.GetImageView();
+	imageInfo2.sampler = floorTexture.GetSampler();
+
+	descriptorWrites[1].dstSet = floorSet;
+	descriptorWrites[1].dstBinding = 1;
+	descriptorWrites[1].pImageInfo = &imageInfo2;
+
+	vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, nullptr);
 
 
-	imageInfo.imageView = cubemap.GetImageView();
-	imageInfo.sampler = cubemap.GetSampler();
+	// Skybox
+	imageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
+	imageInfo.imageView = shadowFB.GetDepthTexture().GetImageView();
+	imageInfo.sampler = shadowFB.GetDepthTexture().GetSampler();
 
-	VkWriteDescriptorSet skyboxSetWrite = {};
-	skyboxSetWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	skyboxSetWrite.dstSet = skyboxSet;
-	skyboxSetWrite.dstBinding = 0;
-	skyboxSetWrite.dstArrayElement = 0;
-	skyboxSetWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	skyboxSetWrite.descriptorCount = 1;
-	skyboxSetWrite.pImageInfo = &imageInfo;
+	descriptorWrites[0].dstSet = skyboxSet;
+	descriptorWrites[0].dstBinding = 0;
+	descriptorWrites[0].pImageInfo = &imageInfo;
+
+	imageInfo2.imageView = cubemap.GetImageView();
+	imageInfo2.sampler = cubemap.GetSampler();
+
+	descriptorWrites[1].dstSet = skyboxSet;
+	descriptorWrites[1].dstBinding = 1;
+	descriptorWrites[1].pImageInfo = &imageInfo2;
+
+	vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, nullptr);
 
 
-	vkUpdateDescriptorSets(device, 1, &skyboxSetWrite, 0, nullptr);
+	// Create pipeline layout
+	VkDescriptorSetLayout setLayouts[] = { buffersSetLayout, texturesSetLayout };
+
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutInfo.setLayoutCount = 2;
+	pipelineLayoutInfo.pSetLayouts = setLayouts;
+	pipelineLayoutInfo.pushConstantRangeCount = 0;
+	pipelineLayoutInfo.pPushConstantRanges = nullptr;
+
+	if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create pipeline layout\n";
+		return 1;
+	}
+	std::cout << "Create pipeline layout\n";
+
+
 
 	VkVertexInputBindingDescription bindingDesc = {};
 	bindingDesc.binding = 0;
@@ -351,132 +363,45 @@ int main()
 	attribDesc[2].location = 2;
 	attribDesc[2].offset = offsetof(Vertex, normal);
 
-	VKShader shader;
-	shader.LoadShader(device, "Data/Shaders/shader_tex_vert.spv", "Data/Shaders/shader_tex_frag.spv");
 
-	VkPipelineShaderStageCreateInfo shaderStages[] = { shader.GetVertexStageInfo(), shader.GetFragmentStageInfo() };
-
-	VkPipelineVertexInputStateCreateInfo vertexInputInfo = {};
-	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 1;
-	vertexInputInfo.pVertexBindingDescriptions = &bindingDesc;
-	vertexInputInfo.vertexAttributeDescriptionCount = 3;
-	vertexInputInfo.pVertexAttributeDescriptions = attribDesc;
-
-	VkPipelineInputAssemblyStateCreateInfo inputAssembly = {};
-	inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-	inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-	inputAssembly.primitiveRestartEnable = VK_FALSE;
-
-	VkViewport viewport = {};
-	viewport.x = 0.0f;
-	viewport.y = 0.0f;
-	viewport.width = (float)surfaceExtent.width;
-	viewport.height = (float)surfaceExtent.height;
-	viewport.minDepth = 0.0f;
-	viewport.maxDepth = 1.0f;
+	PipelineInfo pipeInfo = VKPipeline::DefaultFillStructs();
 
 	VkRect2D scissor = {};
 	scissor.offset = { 0, 0 };
 	scissor.extent = surfaceExtent;
 
-	VkPipelineViewportStateCreateInfo viewportState = {};
-	viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-	viewportState.viewportCount = 1;
-	viewportState.pViewports = &viewport;
-	viewportState.scissorCount = 1;
-	viewportState.pScissors = &scissor;
-
-	VkPipelineRasterizationStateCreateInfo rasterizer = {};
-	rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-	rasterizer.depthClampEnable = VK_FALSE;
-	rasterizer.rasterizerDiscardEnable = VK_FALSE;
-	rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
-	rasterizer.lineWidth = 1.0f;
-	rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-	rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-	rasterizer.depthBiasEnable = VK_FALSE;
-	rasterizer.depthBiasConstantFactor = 0.0f;
-	rasterizer.depthBiasClamp = 0.0f;
-	rasterizer.depthBiasSlopeFactor = 0.0f;
-
-	VkPipelineMultisampleStateCreateInfo multisampling = {};
-	multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-	multisampling.sampleShadingEnable = VK_FALSE;
-	multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-
 	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
 	colorBlendAttachment.blendEnable = VK_FALSE;
 
-	VkPipelineColorBlendStateCreateInfo colorBlending = {};
-	colorBlending.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-	colorBlending.logicOpEnable = VK_FALSE;
-	colorBlending.attachmentCount = 1;
-	colorBlending.pAttachments = &colorBlendAttachment;
-	colorBlending.blendConstants[0] = 0.0f;
-	colorBlending.blendConstants[1] = 0.0f;
-	colorBlending.blendConstants[2] = 0.0f;
-	colorBlending.blendConstants[3] = 0.0f;
-
-	VkPipelineDepthStencilStateCreateInfo depthStencilState = {};
-	depthStencilState.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-	depthStencilState.depthTestEnable = VK_TRUE;
-	depthStencilState.depthWriteEnable = VK_TRUE;
-	depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
-	depthStencilState.depthBoundsTestEnable = VK_FALSE;
-	depthStencilState.stencilTestEnable = VK_FALSE;
-
 	VkDynamicState dynamicStates[] = {
 		VK_DYNAMIC_STATE_VIEWPORT,
-		//VK_DYNAMIC_STATE_LINE_WIDTH
 	};
 
-	VkPipelineDynamicStateCreateInfo dynamicState = {};
-	dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-	dynamicState.dynamicStateCount = 1;
-	dynamicState.pDynamicStates = dynamicStates;
+	pipeInfo.vertexInput.vertexBindingDescriptionCount = 1;
+	pipeInfo.vertexInput.pVertexBindingDescriptions = &bindingDesc;
+	pipeInfo.vertexInput.vertexAttributeDescriptionCount = 3;
+	pipeInfo.vertexInput.pVertexAttributeDescriptions = attribDesc;
 
-	VkDescriptorSetLayout setLayouts[] = { uboSetLayout, texturesSetLayout };
+	// No need to set the viewport because it's dynamic
+	pipeInfo.viewportState.viewportCount = 1;
+	pipeInfo.viewportState.scissorCount = 1;
+	pipeInfo.viewportState.pScissors = &scissor;
 
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
-	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 2;
-	pipelineLayoutInfo.pSetLayouts = setLayouts;
-	pipelineLayoutInfo.pushConstantRangeCount = 0;
-	pipelineLayoutInfo.pPushConstantRanges = nullptr;
+	pipeInfo.colorBlending.attachmentCount = 1;
+	pipeInfo.colorBlending.pAttachments = &colorBlendAttachment;
 
-	if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create pipeline layout\n";
+	pipeInfo.dynamicState.dynamicStateCount = 1;
+	pipeInfo.dynamicState.pDynamicStates = dynamicStates;
+
+	
+
+	VKShader modelShader;
+	modelShader.LoadShader(device, "Data/Shaders/shader_vert.spv", "Data/Shaders/shader_frag.spv");
+
+	VKPipeline modelPipeline;
+	if (!modelPipeline.Create(device, pipeInfo, pipelineLayout, modelShader, offscreenFB.GetRenderPass()))
 		return 1;
-	}
-	std::cout << "Create pipeline layout\n";
-
-	VkGraphicsPipelineCreateInfo pipelineInfo = {};
-	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-	pipelineInfo.stageCount = 2;
-	pipelineInfo.pStages = shaderStages;
-	pipelineInfo.pVertexInputState = &vertexInputInfo;
-	pipelineInfo.pInputAssemblyState = &inputAssembly;
-	pipelineInfo.pViewportState = &viewportState;
-	pipelineInfo.pRasterizationState = &rasterizer;
-	pipelineInfo.pMultisampleState = &multisampling;
-	pipelineInfo.pDepthStencilState = &depthStencilState;
-	pipelineInfo.pColorBlendState = &colorBlending;
-	pipelineInfo.pDynamicState = &dynamicState;
-	pipelineInfo.layout = pipelineLayout;
-	pipelineInfo.renderPass = offscreenRenderPass;
-	pipelineInfo.subpass = 0;
-	pipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-	pipelineInfo.basePipelineIndex = -1;
-
-	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &pipeline) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create graphics pipeline\n";
-		return 1;
-	}
-	std::cout << "Create pipeline\n";
 
 
 
@@ -540,12 +465,6 @@ int main()
 	vertexStagingBuffer.Dispose(device);
 
 
-
-	VKShader skyboxShader;
-	skyboxShader.LoadShader(device, "Data/Shaders/skybox_vert.spv", "Data/Shaders/skybox_frag.spv");
-
-	VkPipelineShaderStageCreateInfo skyboxShaderStages[] = { skyboxShader.GetVertexStageInfo(), skyboxShader.GetFragmentStageInfo() };
-
 	bindingDesc.binding = 0;
 	bindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 	bindingDesc.stride = sizeof(glm::vec3);
@@ -555,90 +474,80 @@ int main()
 	attribDesc[0].location = 0;
 	attribDesc[0].offset = 0;
 
-	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 1;
-	vertexInputInfo.pVertexBindingDescriptions = &bindingDesc;
-	vertexInputInfo.vertexAttributeDescriptionCount = 1;
-	vertexInputInfo.pVertexAttributeDescriptions = attribDesc;
+	pipeInfo.vertexInput.vertexBindingDescriptionCount = 1;
+	pipeInfo.vertexInput.pVertexBindingDescriptions = &bindingDesc;
+	pipeInfo.vertexInput.vertexAttributeDescriptionCount = 1;
+	pipeInfo.vertexInput.pVertexAttributeDescriptions = attribDesc;
 
 	// Make sure to use LEQUAL in depth testing, because we set the skybox depth to 1 in the vertex shader
 	// and otherwise wouldn't render if we kept using just LESS
-	depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
+	pipeInfo.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 
-	VkGraphicsPipelineCreateInfo skyboxPipelineInfo = {};
-	skyboxPipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-	skyboxPipelineInfo.stageCount = 2;
-	skyboxPipelineInfo.pStages = skyboxShaderStages;
-	skyboxPipelineInfo.pVertexInputState = &vertexInputInfo;
-	skyboxPipelineInfo.pInputAssemblyState = &inputAssembly;
-	skyboxPipelineInfo.pViewportState = &viewportState;
-	skyboxPipelineInfo.pRasterizationState = &rasterizer;
-	skyboxPipelineInfo.pMultisampleState = &multisampling;
-	skyboxPipelineInfo.pDepthStencilState = &depthStencilState;
-	skyboxPipelineInfo.pColorBlendState = &colorBlending;
-	skyboxPipelineInfo.pDynamicState = &dynamicState;
-	skyboxPipelineInfo.layout = pipelineLayout;
-	skyboxPipelineInfo.renderPass = offscreenRenderPass;
-	skyboxPipelineInfo.subpass = 0;
-	skyboxPipelineInfo.basePipelineHandle = VK_NULL_HANDLE;
-	skyboxPipelineInfo.basePipelineIndex = -1;
+	VKShader skyboxShader;
+	skyboxShader.LoadShader(device, "Data/Shaders/skybox_vert.spv", "Data/Shaders/skybox_frag.spv");
 
-	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &skyboxPipelineInfo, nullptr, &skyboxPipeline) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create skybox pipeline\n";
+	VKPipeline skyboxPipeline;
+	if (!skyboxPipeline.Create(device, pipeInfo, pipelineLayout, skyboxShader, offscreenFB.GetRenderPass()))
 		return 1;
-	}
 
 	// OFFSCREEN
 
-	// Quad is rendered with no buffers
+	// Post quad is rendered with no buffers
+	pipeInfo.vertexInput.vertexBindingDescriptionCount = 0;
+	pipeInfo.vertexInput.pVertexBindingDescriptions = nullptr;
+	pipeInfo.vertexInput.vertexAttributeDescriptionCount = 0;
+	pipeInfo.vertexInput.pVertexAttributeDescriptions = nullptr;
 
-	VKShader quadShader;
-	quadShader.LoadShader(device, "Data/Shaders/quad_vert.spv", "Data/Shaders/quad_frag.spv");
-
-	VkPipelineShaderStageCreateInfo quadShaderStages[] = { quadShader.GetVertexStageInfo(), quadShader.GetFragmentStageInfo() };
-
-	vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-	vertexInputInfo.vertexBindingDescriptionCount = 0;
-	vertexInputInfo.pVertexBindingDescriptions = nullptr;
-	vertexInputInfo.vertexAttributeDescriptionCount = 0;
-	vertexInputInfo.pVertexAttributeDescriptions = nullptr;
-
-	rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
-	rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	pipeInfo.rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
+	pipeInfo.rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
 
 	// Change it back to LESS from the skybox pipeline
-	depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
+	pipeInfo.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
 
-	VkGraphicsPipelineCreateInfo quadPipeInfo = {};
-	quadPipeInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-	quadPipeInfo.stageCount = 2;
-	quadPipeInfo.pStages = quadShaderStages;
-	quadPipeInfo.pVertexInputState = &vertexInputInfo;
-	quadPipeInfo.pInputAssemblyState = &inputAssembly;
-	quadPipeInfo.pViewportState = &viewportState;
-	quadPipeInfo.pRasterizationState = &rasterizer;
-	quadPipeInfo.pMultisampleState = &multisampling;
-	quadPipeInfo.pDepthStencilState = &depthStencilState;
-	quadPipeInfo.pColorBlendState = &colorBlending;
-	quadPipeInfo.pDynamicState = &dynamicState;
-	quadPipeInfo.layout = pipelineLayout;
-	quadPipeInfo.renderPass = renderer.GetDefaultRenderPass();
-	quadPipeInfo.subpass = 0;
-	quadPipeInfo.basePipelineHandle = VK_NULL_HANDLE;
-	quadPipeInfo.basePipelineIndex = -1;
+	VKShader postQuadShader;
+	postQuadShader.LoadShader(device, "Data/Shaders/post_quad_vert.spv", "Data/Shaders/post_quad_frag.spv");
 
-	VkPipeline quadPipeline;
-
-	if (vkCreateGraphicsPipelines(device, VK_NULL_HANDLE, 1, &quadPipeInfo, nullptr, &quadPipeline) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create skybox pipeline\n";
+	VKPipeline postQuadPipeline;
+	if(!postQuadPipeline.Create(device, pipeInfo, pipelineLayout, postQuadShader, renderer.GetDefaultRenderPass()))
 		return 1;
-	}
 
+	// SHADOW MAPPING
+
+	bindingDesc = {};
+	bindingDesc.binding = 0;
+	bindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	bindingDesc.stride = sizeof(Vertex);
+
+	attribDesc[0].binding = 0;
+	attribDesc[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+	attribDesc[0].location = 0;
+	attribDesc[0].offset = 0;
+
+	attribDesc[1].binding = 0;
+	attribDesc[1].format = VK_FORMAT_R32G32_SFLOAT;
+	attribDesc[1].location = 1;
+	attribDesc[1].offset = offsetof(Vertex, uv);
+
+	attribDesc[2].binding = 0;
+	attribDesc[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+	attribDesc[2].location = 2;
+	attribDesc[2].offset = offsetof(Vertex, normal);
+
+	pipeInfo.vertexInput.vertexBindingDescriptionCount = 1;
+	pipeInfo.vertexInput.pVertexBindingDescriptions = &bindingDesc;
+	pipeInfo.vertexInput.vertexAttributeDescriptionCount = 3;
+	pipeInfo.vertexInput.pVertexAttributeDescriptions = attribDesc;
 
 	
-	
+	pipeInfo.rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	pipeInfo.rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
+
+	VKShader shadowShader;
+	shadowShader.LoadShader(device, "Data/Shaders/shadow_vert.spv", "Data/Shaders/shadow_frag.spv");
+
+	VKPipeline shadowPipeline;
+	if(!shadowPipeline.Create(device, pipeInfo, pipelineLayout, shadowShader, shadowFB.GetRenderPass()))
+		return 1;
 
 
 
@@ -656,42 +565,22 @@ int main()
 	}
 
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	imageInfo.imageView = offscreenColorTexture.GetImageView();
-	imageInfo.sampler = offscreenColorTexture.GetSampler();
 
-	descriptorWrites.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	descriptorWrites.dstSet = quadSet;
-	descriptorWrites.dstBinding = 0;
-	descriptorWrites.dstArrayElement = 0;
-	descriptorWrites.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	descriptorWrites.descriptorCount = 1;
-	descriptorWrites.pImageInfo = &imageInfo;
+	imageInfo.imageView = shadowFB.GetDepthTexture().GetImageView();
+	imageInfo.sampler = shadowFB.GetDepthTexture().GetSampler();
 
-	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
+	descriptorWrites[0].dstSet = quadSet;
+	descriptorWrites[0].dstBinding = 0;
+	descriptorWrites[0].pImageInfo = &imageInfo;
 
+	imageInfo2.imageView = offscreenFB.GetFirstColorTexture().GetImageView();
+	imageInfo2.sampler = offscreenFB.GetFirstColorTexture().GetSampler();
 
-	
+	descriptorWrites[1].dstSet = quadSet;
+	descriptorWrites[1].dstBinding = 1;
+	descriptorWrites[1].pImageInfo = &imageInfo2;
 
-	VkImageView attachments[2];
-	attachments[0] = offscreenColorTexture.GetImageView();
-	attachments[1] = offscreentDepthTexture.GetImageView();
-
-	VkFramebufferCreateInfo fbInfo = {};
-	fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-	fbInfo.attachmentCount = 2;
-	fbInfo.height = static_cast<uint32_t>(height);
-	fbInfo.width = static_cast<uint32_t>(width);
-	fbInfo.layers = 1;
-	fbInfo.pAttachments = attachments;
-	fbInfo.renderPass = offscreenRenderPass;
-	
-	VkFramebuffer offscreenFB;
-
-	if (vkCreateFramebuffer(device, &fbInfo, nullptr, &offscreenFB) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create offscreen framebuffer!\n";
-		return 1;
-	}
+	vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, nullptr);
 
 
 
@@ -701,6 +590,17 @@ int main()
 	Camera camera;
 	camera.SetPosition(glm::vec3(0.0f, 0.5f, 1.5f));
 	camera.SetProjectionMatrix(85.0f, width, height, 0.1f, 10.0f);
+
+	glm::mat4 *camerasData = (glm::mat4*)malloc(static_cast<size_t>(cameraUBO.GetSize()));
+
+	unsigned int minUBOAlignment = static_cast<unsigned int>(base.GetPhysicalDeviceLimits().minUniformBufferOffsetAlignment);
+	unsigned int alignSingleUBOSize = sizeof(CameraUBO);
+
+	if (minUBOAlignment > 0)
+		alignSingleUBOSize = (alignSingleUBOSize + minUBOAlignment - 1) & ~(minUBOAlignment - 1);
+
+	unsigned int currentCamera = 0;
+	unsigned int maxCamera = 2;
 
 	while (!glfwWindowShouldClose(window.GetHandle()))
 	{
@@ -712,74 +612,131 @@ int main()
 
 		camera.Update(deltaTime, true, true);
 
-		renderer.BeginFrame();
-
 		static auto startTime = std::chrono::high_resolution_clock::now();
 
 		auto curTime = std::chrono::high_resolution_clock::now();
 		float time = std::chrono::duration<float, std::chrono::seconds::period>(curTime - startTime).count();
 
-		CameraUBO ubo = {};
-		//ubo.model = glm::mat4(1.0f);
-		ubo.model = glm::rotate(glm::mat4(1.0f), time * glm::radians(20.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-		//ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(-180.0f), glm::vec3(1.0f, 0.0f, 0.0f));
-		ubo.view = camera.GetViewMatrix();
-		ubo.proj = camera.GetProjectionMatrix();
-		ubo.proj[1][1] *= -1;
+		// Set camera at 0 at the start of the frame
+		currentCamera = 0;
+
+		glm::mat4 lightProj = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 10.0f);
+		glm::mat4 lightView = glm::lookAt(glm::vec3(0.0f, 2.0f, 2.5f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 00.0f));
+		glm::mat4 lightSpaceMatrix = lightProj * lightView;
+
+		glm::mat4 modelMatrix = glm::rotate(glm::mat4(1.0f), time * glm::radians(20.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+
+		CameraUBO* ubo = (CameraUBO*)(((uint64_t)camerasData + (currentCamera * alignSingleUBOSize)));
+		if (ubo)
+		{
+			ubo->model = modelMatrix;
+			ubo->view = lightView;
+			ubo->proj = lightProj;
+			ubo->proj[1][1] *= -1;
+		}
 
 
-
-		void* mapped = cameraUBO.Map(device, renderer.GetCurrentFrame() * (cameraUBO.GetSize() / MAX_FRAMES_IN_FLIGHT), sizeof(CameraUBO));
-		memcpy(mapped, &ubo, sizeof(CameraUBO));
-		cameraUBO.Unmap(device);
-
+		renderer.WaitForFrameFences();
 
 		renderer.BeginCmdRecording();
 
 		VkCommandBuffer cmdBuffer = renderer.GetCurrentCmdBuffer();
 
+		// Bind the camera descriptor set with the ubo
+		//vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &buffersSet, 0, nullptr);
+		uint32_t dynamicOffset = static_cast<uint32_t>(currentCamera) * alignSingleUBOSize;
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &buffersSet, 1, &dynamicOffset);
+
+		currentCamera++;
+
 		VkViewport viewport = {};
 		viewport.x = 0.0f;
-		viewport.y = 0.0f;
-		viewport.width = (float)surfaceExtent.width;
-		viewport.height = (float)surfaceExtent.height;
+		viewport.y = 0.0f;		
 		viewport.minDepth = 0.0f;
 		viewport.maxDepth = 1.0f;
 
+		// SHADOW MAPPING
+
+		viewport.width = 1024;
+		viewport.height = 1024;
+
 		vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
 
-		// Bind the camera descriptor set with the ubo
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &camUBOSet[renderer.GetCurrentFrame()], 0, nullptr);
-
-
-		// OFFSCREEN
-		
-		VkClearValue clearValues[2] = {};
-		clearValues[0].color = { 0.3f, 0.3f, 0.3f, 1.0f };
-		clearValues[1].depthStencil = { 1.0f, 0 };
+		VkClearValue depthClearValue = {};
+		depthClearValue.depthStencil = { 1.0f, 0 };
 
 		VkRenderPassBeginInfo renderBeginPassInfo = {};
 		renderBeginPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-		renderBeginPassInfo.renderPass = offscreenRenderPass;
-		renderBeginPassInfo.framebuffer = offscreenFB;
+		renderBeginPassInfo.renderPass = shadowFB.GetRenderPass();
+		renderBeginPassInfo.framebuffer = shadowFB.GetFramebuffer();
 		renderBeginPassInfo.renderArea.offset = { 0, 0 };
-		renderBeginPassInfo.renderArea.extent = surfaceExtent;
-		renderBeginPassInfo.clearValueCount = 2;
-		renderBeginPassInfo.pClearValues = clearValues;
+		renderBeginPassInfo.renderArea.extent = { 1024, 1024 };
+		renderBeginPassInfo.clearValueCount = 1;
+		renderBeginPassInfo.pClearValues = &depthClearValue;
 
 		vkCmdBeginRenderPass(cmdBuffer, &renderBeginPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 
 		VkBuffer vertexBuffers[] = { VK_NULL_HANDLE };
 		VkDeviceSize offsets[] = { 0 };
 
-		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shadowPipeline.GetPipeline());
 		vertexBuffers[0] = model.GetVertexBuffer().GetBuffer();
 		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
 		vkCmdBindIndexBuffer(cmdBuffer, model.GetIndexBuffer().GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
 		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &modelSet, 0, nullptr);
 		vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(model.GetIndexCount()), 1, 0, 0, 0);
 
-		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipeline);
+		vkCmdEndRenderPass(cmdBuffer);
+
+		// OFFSCREEN
+
+		// Set the normal camera
+		ubo = (CameraUBO*)(((uint64_t)camerasData + (currentCamera * alignSingleUBOSize)));
+		if (ubo)
+		{
+			ubo->model = modelMatrix;
+			ubo->view = camera.GetViewMatrix();
+			ubo->proj = camera.GetProjectionMatrix();
+			ubo->proj[1][1] *= -1;
+			ubo->lightSpaceMatrix = lightSpaceMatrix;
+		}
+
+		dynamicOffset = static_cast<uint32_t>(currentCamera) * alignSingleUBOSize;
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &buffersSet, 1, &dynamicOffset);
+
+		viewport.width = (float)surfaceExtent.width;
+		viewport.height = (float)surfaceExtent.height;
+
+		vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
+		
+		VkClearValue clearValues[2] = {};
+		clearValues[0].color = { 0.3f, 0.3f, 0.3f, 1.0f };
+		clearValues[1].depthStencil = { 1.0f, 0 };
+
+		renderBeginPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+		renderBeginPassInfo.renderPass = offscreenFB.GetRenderPass();
+		renderBeginPassInfo.framebuffer = offscreenFB.GetFramebuffer();
+		renderBeginPassInfo.renderArea.offset = { 0, 0 };
+		renderBeginPassInfo.renderArea.extent = surfaceExtent;
+		renderBeginPassInfo.clearValueCount = 2;
+		renderBeginPassInfo.pClearValues = clearValues;
+
+		vkCmdBeginRenderPass(cmdBuffer, &renderBeginPassInfo, VK_SUBPASS_CONTENTS_INLINE);	
+
+		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelPipeline.GetPipeline());
+		vertexBuffers[0] = model.GetVertexBuffer().GetBuffer();
+		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
+		vkCmdBindIndexBuffer(cmdBuffer, model.GetIndexBuffer().GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &modelSet, 0, nullptr);
+		vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(model.GetIndexCount()), 1, 0, 0, 0);
+
+		vertexBuffers[0] = floorModel.GetVertexBuffer().GetBuffer();
+		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
+		vkCmdBindIndexBuffer(cmdBuffer, floorModel.GetIndexBuffer().GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &floorSet, 0, nullptr);
+		vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(floorModel.GetIndexCount()), 1, 0, 0, 0);
+
+		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipeline.GetPipeline());
 		vertexBuffers[0] = skyboxVB.GetBuffer();
 		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
 		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &skyboxSet, 0, nullptr);
@@ -790,46 +747,51 @@ int main()
 		// Normal pass
 		renderer.BeginDefaultRenderPass();
 
-		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, quadPipeline);
+		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, postQuadPipeline.GetPipeline());
 		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &quadSet, 0, nullptr);
 		vkCmdDraw(cmdBuffer, 3, 1, 0, 0);
 
 		renderer.EndDefaultRenderPass();
 		renderer.EndCmdRecording();
 
-		renderer.EndFrame();
+		void* mapped = cameraUBO.Map(device, 0, VK_WHOLE_SIZE);
+		memcpy(mapped, camerasData, static_cast<size_t>(currentCamera + 1) * alignSingleUBOSize);
+		cameraUBO.Unmap(device);
+
+		renderer.Present();
 	}
 
 	vkDeviceWaitIdle(device);
 
-	vkDestroyDescriptorSetLayout(device, uboSetLayout, nullptr);
+	if (camerasData)
+		free(camerasData);
+
+	vkDestroyDescriptorSetLayout(device, buffersSetLayout, nullptr);
 	vkDestroyDescriptorSetLayout(device, texturesSetLayout, nullptr);
 
 	cameraUBO.Dispose(device);
-
-	offscreenColorTexture.Dispose(device);
-	offscreentDepthTexture.Dispose(device);
-
-	vkDestroyRenderPass(device, offscreenRenderPass, nullptr);
-	vkDestroyFramebuffer(device, offscreenFB, nullptr);
-
-	vkDestroyPipeline(device, quadPipeline, nullptr);
-	quadShader.Dispose(device);
-
+	offscreenFB.Dispose(device);
+	shadowFB.Dispose(device);
+	
 	cubemap.Dispose(device);
-	texture.Dispose(device);
+	modelTexture.Dispose(device);
 	model.Dispose(device);
-
+	floorTexture.Dispose(device);
+	floorModel.Dispose(device);
 	skyboxVB.Dispose(device);
 
-	vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-
-	vkDestroyPipeline(device, pipeline, nullptr);
-	vkDestroyPipeline(device, skyboxPipeline, nullptr);
-	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
-
-	shader.Dispose(device);
+	modelShader.Dispose(device);
 	skyboxShader.Dispose(device);
+	postQuadShader.Dispose(device);
+	shadowShader.Dispose(device);
+
+	modelPipeline.Dispose(device);
+	skyboxPipeline.Dispose(device);
+	postQuadPipeline.Dispose(device);
+	shadowPipeline.Dispose(device);
+
+	vkDestroyDescriptorPool(device, descriptorPool, nullptr);
+	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 
 	renderer.Dispose();
 	base.Dispose();

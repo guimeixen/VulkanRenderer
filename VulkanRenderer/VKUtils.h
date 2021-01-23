@@ -45,4 +45,5 @@ namespace vkutils
 	VkFormat FindSupportedFormat(VkPhysicalDevice physicalDevice, const std::vector<VkFormat>& formats, VkImageTiling tiling, VkFormatFeatureFlags flags);
 	VkFormat FindSupportedDepthFormat(VkPhysicalDevice physicalDevice);
 	bool FormatHasStencil(VkFormat format);
+	bool IsFormatFilterable(VkPhysicalDevice physicalDevice, VkFormat format, VkImageTiling tiling);
 }

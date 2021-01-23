@@ -253,17 +253,16 @@ bool VKTexture2D::CreateSampler(VkDevice device)
 {
 	VkSamplerCreateInfo samplerInfo = {};
 	samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-	samplerInfo.magFilter = VK_FILTER_LINEAR;
-	samplerInfo.minFilter = VK_FILTER_LINEAR;
-	samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
-	samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+	samplerInfo.magFilter = params.filter;
+	samplerInfo.minFilter = params.filter;
+	samplerInfo.addressModeU = params.addressMode;
+	samplerInfo.addressModeV = params.addressMode;
+	samplerInfo.addressModeW = params.addressMode;
 	samplerInfo.anisotropyEnable = VK_FALSE;
 	samplerInfo.maxAnisotropy = 1.0f;
 	samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
 	samplerInfo.unnormalizedCoordinates = VK_FALSE;
 	samplerInfo.compareEnable = VK_FALSE;
-	samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
 	samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 	samplerInfo.mipLodBias = 0.0f;
 	samplerInfo.minLod = 0.0f;
@@ -278,7 +277,7 @@ bool VKTexture2D::CreateSampler(VkDevice device)
 	return true;
 }
 
-bool VKTexture2D::CreateDepthTexture(const VKBase& base, const TextureParams& textureParams, unsigned int width, unsigned int height)
+bool VKTexture2D::CreateDepthTexture(const VKBase& base, const TextureParams& textureParams, unsigned int width, unsigned int height, bool sampled)
 {
 	params = textureParams;
 	textureType = TextureType::TEXTURE_2D;
@@ -294,10 +293,13 @@ bool VKTexture2D::CreateDepthTexture(const VKBase& base, const TextureParams& te
 	depthImageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 	depthImageInfo.mipLevels = 1;
 	depthImageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	depthImageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
 	depthImageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	depthImageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 	depthImageInfo.flags = 0;
+	depthImageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+
+	if (sampled)
+		depthImageInfo.usage |= VK_IMAGE_USAGE_SAMPLED_BIT;
 
 	VkDevice device = base.GetDevice();
 
@@ -329,6 +331,12 @@ bool VKTexture2D::CreateDepthTexture(const VKBase& base, const TextureParams& te
 
 	if (!CreateImageView(device, aspect))
 		return false;
+
+	if (sampled)
+	{
+		if (!CreateSampler(device))
+			return false;
+	}
 
 	return true;
 }

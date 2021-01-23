@@ -149,10 +149,13 @@
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="Material.cpp" />
     <ClCompile Include="Model.cpp" />
     <ClCompile Include="stb.cpp" />
     <ClCompile Include="VKBase.cpp" />
     <ClCompile Include="VKBuffer.cpp" />
+    <ClCompile Include="VKFramebuffer.cpp" />
+    <ClCompile Include="VKPipeline.cpp" />
     <ClCompile Include="VKRenderer.cpp" />
     <ClCompile Include="VKShader.cpp" />
     <ClCompile Include="VKTexture2D.cpp" />
@@ -162,10 +165,13 @@
   <ItemGroup>
     <ClInclude Include="Camera.h" />
     <ClInclude Include="Input.h" />
+    <ClInclude Include="Material.h" />
     <ClInclude Include="Model.h" />
     <ClInclude Include="VertexTypes.h" />
     <ClInclude Include="VKBase.h" />
     <ClInclude Include="VKBuffer.h" />
+    <ClInclude Include="VKFramebuffer.h" />
+    <ClInclude Include="VKPipeline.h" />
     <ClInclude Include="VKRenderer.h" />
     <ClInclude Include="VKShader.h" />
     <ClInclude Include="VKTexture2D.h" />

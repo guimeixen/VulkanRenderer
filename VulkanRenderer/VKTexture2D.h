@@ -12,6 +12,8 @@ enum class TextureType {
 
 struct TextureParams {
 	VkFormat format;
+	VkSamplerAddressMode addressMode;
+	VkFilter filter;
 };
 
 class VKTexture2D
@@ -21,7 +23,7 @@ public:
 
 	bool LoadFromFile(const std::string &path, VKBase &base, const TextureParams &textureParams);
 	bool LoadCubemapFromFiles(const std::vector<std::string>& facesPath, VKBase& base, const TextureParams& textureParams);
-	bool CreateDepthTexture(const VKBase &base, const TextureParams& textureParams, unsigned int width, unsigned int height);
+	bool CreateDepthTexture(const VKBase &base, const TextureParams& textureParams, unsigned int width, unsigned int height, bool sampled);
 	// Right now the function assumes the color texture will be sampled
 	bool CreateColorTexture(const VKBase& base, const TextureParams& textureParams, unsigned int width, unsigned int height);
 	void Dispose(VkDevice device);

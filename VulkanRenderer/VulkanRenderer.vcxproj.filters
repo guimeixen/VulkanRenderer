@@ -69,6 +69,15 @@
     <ClCompile Include="Window.cpp">
       <Filter>Source Files\Program</Filter>
     </ClCompile>
+    <ClCompile Include="VKFramebuffer.cpp">
+      <Filter>Source Files\VK</Filter>
+    </ClCompile>
+    <ClCompile Include="Material.cpp">
+      <Filter>Source Files\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="VKPipeline.cpp">
+      <Filter>Source Files\VK</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="VKBase.h">
@@ -103,6 +112,15 @@
     </ClInclude>
     <ClInclude Include="VertexTypes.h">
       <Filter>Header Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="VKFramebuffer.h">
+      <Filter>Header Files\VK</Filter>
+    </ClInclude>
+    <ClInclude Include="Material.h">
+      <Filter>Header Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="VKPipeline.h">
+      <Filter>Header Files\VK</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

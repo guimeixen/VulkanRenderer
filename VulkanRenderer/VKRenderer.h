@@ -12,8 +12,8 @@ public:
 
 	bool Init(GLFWwindow* window, unsigned int width, unsigned int height);
 	void Dispose();
-	void BeginFrame();
-	void EndFrame();
+	void WaitForFrameFences();
+	void Present();
 
 	void BeginCmdRecording();
 	void BeginDefaultRenderPass();

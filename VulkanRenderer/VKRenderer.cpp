@@ -23,7 +23,7 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 	TextureParams depthTextureParams = {};
 	depthTextureParams.format = vkutils::FindSupportedDepthFormat(base.GetPhysicalDevice());
 
-	depthTexture.CreateDepthTexture(base, depthTextureParams, base.GetSurfaceExtent().width, base.GetSurfaceExtent().height);
+	depthTexture.CreateDepthTexture(base, depthTextureParams, base.GetSurfaceExtent().width, base.GetSurfaceExtent().height, false);
 
 	if (!CreateRenderPass(base, renderPass, depthTexture.GetFormat()))
 		return false;
@@ -101,11 +101,16 @@ void VKRenderer::Dispose()
 
 }
 
-void VKRenderer::BeginFrame()
+void VKRenderer::WaitForFrameFences()
+{
+	vkWaitForFences(base.GetDevice(), 1, &frameFences[currentFrame], VK_TRUE, UINT64_MAX);
+}
+
+void VKRenderer::Present()
 {
 	VkDevice device = base.GetDevice();
-
-	vkWaitForFences(device, 1, &frameFences[currentFrame], VK_TRUE, UINT64_MAX);
+	VkQueue graphicsQueue = base.GetGraphicsQueue();
+	VkQueue presentQueue = base.GetPresentQueue();
 
 	VkResult res = vkAcquireNextImageKHR(device, base.GetSwapchain(), UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
@@ -131,20 +136,9 @@ void VKRenderer::BeginFrame()
 		base.RecreateSwapchain(width, height);
 		CreateRenderPass(base, renderPass, depthTexture.GetFormat());
 		CreateFramebuffers(base, renderPass, framebuffers, depthTexture.GetImageView());
-		
-		
-		//CreateCommandBuffers(base, renderPass, base.GetSurfaceExtent(), framebuffers, model.GetIndexCount(), cmdBuffers);
-
 		// We can't present so go to the next iteration
 		//continue;
 	}
-}
-
-void VKRenderer::EndFrame()
-{
-	VkDevice device = base.GetDevice();
-	VkQueue graphicsQueue = base.GetGraphicsQueue();
-	VkQueue presentQueue = base.GetPresentQueue();
 
 	// Check if a previous frame is using this image, then wait on it's fence
 	if (imagesInFlight[imageIndex] != VK_NULL_HANDLE)
@@ -184,7 +178,7 @@ void VKRenderer::EndFrame()
 	presentInfo.pSwapchains = swapChains;
 	presentInfo.pImageIndices = &imageIndex;
 
-	VkResult res = vkQueuePresentKHR(presentQueue, &presentInfo);
+	res = vkQueuePresentKHR(presentQueue, &presentInfo);
 
 	if (res == VK_SUBOPTIMAL_KHR)
 	{
@@ -206,8 +200,6 @@ void VKRenderer::EndFrame()
 		base.RecreateSwapchain(width, height);
 		CreateRenderPass(base, renderPass, depthTexture.GetFormat());
 		CreateFramebuffers(base, renderPass, framebuffers, depthTexture.GetImageView());
-		
-		//CreateCommandBuffers(base, renderPass, base.GetSurfaceExtent(), framebuffers, model.GetIndexCount(), cmdBuffers);
 	}
 
 	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
