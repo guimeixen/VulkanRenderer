@@ -205,6 +205,43 @@ void VKRenderer::Present()
 	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
+VkCommandBuffer VKRenderer::CreateCommandBuffer(bool beginRecord)
+{
+	VkCommandBufferAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.commandPool = base.GetCommandPool();
+	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandBufferCount = 1;
+
+	VkCommandBuffer cmdBuffer;
+
+	if (vkAllocateCommandBuffers(base.GetDevice(), &allocInfo, &cmdBuffer) != VK_SUCCESS)
+	{
+		std::cout << "Failed to allocate command buffer!\n";
+		return VK_NULL_HANDLE;
+	}
+
+	if (beginRecord)
+	{
+		VkCommandBufferBeginInfo beginInfo = {};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = 0;
+
+		if (vkBeginCommandBuffer(cmdBuffer, &beginInfo) != VK_SUCCESS)
+		{
+			std::cout << "Failed to begin command buffer!\n";
+			return VK_NULL_HANDLE;
+		}
+	}
+
+	return cmdBuffer;
+}
+
+void VKRenderer::FreeCommandBuffer(VkCommandBuffer cmdBuffer)
+{
+	vkFreeCommandBuffers(base.GetDevice(), base.GetCommandPool(), 1, &cmdBuffer);
+}
+
 void VKRenderer::BeginCmdRecording()
 {
 	VkCommandBufferBeginInfo beginInfo = {};

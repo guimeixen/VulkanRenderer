@@ -17,7 +17,7 @@ public:
 	void CopyBuffer(const VKBuffer &srcBuffer, const VKBuffer &dstBuffer, unsigned int size);
 	bool CopyBufferToImage(const VKBuffer& buffer, VkImage image, unsigned int width, unsigned int height);
 	bool CopyBufferToCubemapImage(const VKBuffer& buffer, VkImage image, unsigned int width, unsigned int height);
-	bool TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout currentLayout, VkImageLayout newLayout, unsigned int layerCount = 1);
+	bool TransitionImageLayout(VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout, unsigned int layerCount = 1);
 
 	VkInstance GetInstance() const { return instance; }
 	VkPhysicalDevice GetPhysicalDevice() const { return physicalDevice; }

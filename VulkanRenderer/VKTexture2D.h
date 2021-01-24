@@ -32,6 +32,9 @@ public:
 	VkImageView GetImageView() const { return imageView; }
 	VkSampler GetSampler() const { return sampler; }
 	VkFormat GetFormat() const { return params.format; }
+	unsigned int GetNumMipLevels() const { return mipLevels; }
+	unsigned int GetWidth() const { return width; }
+	unsigned int GetHeight() const { return height; }
 
 private:
 	bool CreateImage(VkDevice device);
@@ -46,5 +49,6 @@ private:
 	TextureParams params;
 	unsigned int width;
 	unsigned int height;
+	unsigned int mipLevels;
 	TextureType textureType;
 };

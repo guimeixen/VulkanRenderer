@@ -9,6 +9,7 @@ VKTexture2D::VKTexture2D()
 {
 	width = 0;
 	height = 0;
+	mipLevels = 0;
 	image = VK_NULL_HANDLE;
 	imageView = VK_NULL_HANDLE;
 	memory = VK_NULL_HANDLE;
@@ -34,7 +35,18 @@ bool VKTexture2D::LoadFromFile(const std::string& path, VKBase &base, const Text
 	width = static_cast<unsigned int>(textureWidth);
 	height = static_cast<unsigned int>(textureHeight);
 
-	unsigned int textureSize = width * height * 4 * sizeof(unsigned char);	
+	unsigned int textureSize = width * height * 4 * sizeof(unsigned char);
+
+	mipLevels = std::floor(std::log2(std::max(width, height))) + 1;
+
+	// Check if the format supports image blit
+	VkFormatProperties formatProperties;
+	vkGetPhysicalDeviceFormatProperties(base.GetPhysicalDevice(), params.format, &formatProperties);
+	if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) && !(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
+	{
+		std::cout << "Format doesn't support image blit\n";
+		return false;
+	}
 
 	VKBuffer stagingBuffer;
 
@@ -66,9 +78,19 @@ bool VKTexture2D::LoadFromFile(const std::string& path, VKBase &base, const Text
 
 	vkBindImageMemory(device, image, memory, 0);
 
-	base.TransitionImageLayout(image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-	base.CopyBufferToImage(stagingBuffer, image, textureWidth, textureHeight);
-	base.TransitionImageLayout(image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	if (mipLevels == 1)
+	{
+		base.TransitionImageLayout(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		base.CopyBufferToImage(stagingBuffer, image, textureWidth, textureHeight);
+		base.TransitionImageLayout(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+	}
+	else
+	{
+		// Put the image ready for the image blits for mip map gen by transitioning to SRC_OPTIMAL
+		base.TransitionImageLayout(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		base.CopyBufferToImage(stagingBuffer, image, textureWidth, textureHeight);
+		base.TransitionImageLayout(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
+	}
 
 	stagingBuffer.Dispose(device);
 
@@ -123,6 +145,8 @@ bool VKTexture2D::LoadCubemapFromFiles(const std::vector<std::string>& facesPath
 
 	unsigned int textureSize = width * height * 4 * 6 * sizeof(unsigned char);
 
+	mipLevels = 1;
+
 	VKBuffer stagingBuffer;
 
 	VkDevice device = base.GetDevice();
@@ -162,9 +186,9 @@ bool VKTexture2D::LoadCubemapFromFiles(const std::vector<std::string>& facesPath
 
 	vkBindImageMemory(device, image, memory, 0);
 
-	base.TransitionImageLayout(image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 6);
+	base.TransitionImageLayout(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 6);
 	base.CopyBufferToCubemapImage(stagingBuffer, image, textureWidth, textureHeight);
-	base.TransitionImageLayout(image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 6);
+	base.TransitionImageLayout(image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, 6);
 
 	stagingBuffer.Dispose(device);
 
@@ -199,12 +223,21 @@ bool VKTexture2D::CreateImage(VkDevice device)
 	imageInfo.format = params.format;
 	imageInfo.imageType = VK_IMAGE_TYPE_2D;
 	imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-	imageInfo.mipLevels = 1;
+	imageInfo.mipLevels = static_cast<uint32_t>(mipLevels);
 	imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 	imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 	imageInfo.flags = 0;
+
+	if (mipLevels > 1)
+	{
+		imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	}
+	else
+	{
+		imageInfo.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	}
+
 
 	if (textureType == TextureType::TEXTURE_CUBE)
 	{
@@ -230,7 +263,7 @@ bool VKTexture2D::CreateImageView(VkDevice device, VkImageAspectFlags imageAspec
 	imageViewInfo.format = params.format;
 	imageViewInfo.subresourceRange.aspectMask = imageAspect;
 	imageViewInfo.subresourceRange.baseMipLevel = 0;
-	imageViewInfo.subresourceRange.levelCount = 1;
+	imageViewInfo.subresourceRange.levelCount = static_cast<uint32_t>(mipLevels);
 	imageViewInfo.subresourceRange.baseArrayLayer = 0;
 	imageViewInfo.subresourceRange.layerCount = 1;
 
@@ -266,7 +299,7 @@ bool VKTexture2D::CreateSampler(VkDevice device)
 	samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
 	samplerInfo.mipLodBias = 0.0f;
 	samplerInfo.minLod = 0.0f;
-	samplerInfo.maxLod = 1.0f;
+	samplerInfo.maxLod = (float)mipLevels;
 
 	if (vkCreateSampler(device, &samplerInfo, nullptr, &sampler) != VK_SUCCESS)
 	{
@@ -281,6 +314,9 @@ bool VKTexture2D::CreateDepthTexture(const VKBase& base, const TextureParams& te
 {
 	params = textureParams;
 	textureType = TextureType::TEXTURE_2D;
+	mipLevels = 1;
+	this->width = width;
+	this->height = height;
 
 	VkImageCreateInfo depthImageInfo = {};
 	depthImageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -345,6 +381,9 @@ bool VKTexture2D::CreateColorTexture(const VKBase &base, const TextureParams& te
 {
 	params = textureParams;
 	textureType = TextureType::TEXTURE_2D;
+	mipLevels = 1;
+	this->width = width;
+	this->height = height;
 
 	VkImageCreateInfo imageCreateInfo = {};
 	imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;

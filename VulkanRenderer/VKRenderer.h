@@ -15,6 +15,9 @@ public:
 	void WaitForFrameFences();
 	void Present();
 
+	VkCommandBuffer CreateCommandBuffer(bool beginRecord);
+	void FreeCommandBuffer(VkCommandBuffer cmdBuffer);
+
 	void BeginCmdRecording();
 	void BeginDefaultRenderPass();
 	void EndDefaultRenderPass();

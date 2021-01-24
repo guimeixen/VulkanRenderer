@@ -238,7 +238,7 @@ bool VKBase::CopyBufferToCubemapImage(const VKBuffer& buffer, VkImage image, uns
 	return true;
 }
 
-bool VKBase::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout currentLayout, VkImageLayout newLayout, unsigned int layerCount)
+bool VKBase::TransitionImageLayout(VkImage image, VkImageLayout currentLayout, VkImageLayout newLayout, unsigned int layerCount)
 {
 	VkCommandBuffer cmdBuffer = BeginSingleUseCmdBuffer();
 
@@ -282,7 +282,14 @@ bool VKBase::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout
 		srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		dstStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;		// Assuming we first use the image on the fragment shader. Would have to change if used on the vertex shader first
 	}
+	else if (currentLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+	{
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
 
+		srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+		dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+	}
 
 	vkCmdPipelineBarrier(cmdBuffer, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 

@@ -18,6 +18,77 @@
 unsigned int width = 640;
 unsigned int height = 480;
 
+void CreateMipMaps(VkCommandBuffer cmdBuffer, const VKTexture2D& texture)
+{
+	for (unsigned int i = 1; i < texture.GetNumMipLevels(); i++)
+	{
+		VkImageBlit blit = {};
+
+		// Source
+		blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		blit.srcSubresource.layerCount = 1;
+		blit.srcSubresource.mipLevel = static_cast<uint32_t>(i - 1);
+		blit.srcOffsets[1].x = static_cast<int32_t>(texture.GetWidth() >> (i - 1));
+		blit.srcOffsets[1].y = static_cast<int32_t>(texture.GetHeight() >> (i - 1));
+		blit.srcOffsets[1].z = 1;
+
+		// Destination
+		blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		blit.dstSubresource.layerCount = 1;
+		blit.dstSubresource.mipLevel = static_cast<uint32_t>(i);
+		blit.dstOffsets[1].x = static_cast<int32_t>(texture.GetWidth() >> i);
+		blit.dstOffsets[1].y = static_cast<int32_t>(texture.GetHeight() >> i);
+		blit.dstOffsets[1].z = 1;
+
+		// To account for non square texture (eg 512x1024), when one of the sides reaches zero  4x8,2x4,1x2,0x1!! so we need to correct to 1x1
+		if (blit.dstOffsets[1].x == 0)
+			blit.dstOffsets[1].x = 1;
+		if (blit.dstOffsets[1].y == 0)
+			blit.dstOffsets[1].y = 1;
+
+		// Preprare this mip. Transition this mip level to TRANSFER_DST
+		VkImageMemoryBarrier barrier = {};
+		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+		barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		barrier.image = texture.GetImage();
+		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		barrier.subresourceRange.baseArrayLayer = 0;
+		barrier.subresourceRange.baseMipLevel = i;
+		barrier.subresourceRange.layerCount = 1;
+		barrier.subresourceRange.levelCount = 1;
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+		vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+		vkCmdBlitImage(cmdBuffer, texture.GetImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, texture.GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
+
+		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+		barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+		barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+		// Prepare the current mip as the source for the next mip
+		vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+	}
+
+	// All mips are in TRANSFER_SRC, so transition them all to SHADER_READ
+	VkImageMemoryBarrier barrier = {};
+	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+	barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	barrier.image = texture.GetImage();
+	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	barrier.subresourceRange.baseArrayLayer = 0;
+	barrier.subresourceRange.baseMipLevel = 0;
+	barrier.subresourceRange.layerCount = 1;
+	barrier.subresourceRange.levelCount = texture.GetNumMipLevels();
+	barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+	vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+}
+
 int main()
 {
 	const int MAX_FRAMES_IN_FLIGHT = 2;
@@ -589,13 +660,57 @@ int main()
 	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
 
 
+	// Create mipmaps
 
+	VkCommandBuffer cmdBuffer = renderer.CreateCommandBuffer(true);
+
+	CreateMipMaps(cmdBuffer, modelTexture);
+	CreateMipMaps(cmdBuffer, floorTexture);
+
+	if (vkEndCommandBuffer(cmdBuffer) != VK_SUCCESS)
+	{
+		std::cout << "Failed to end command buffer\n";
+		return 1;
+	}
+
+	VkSubmitInfo submitInfo = {};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &cmdBuffer;
+
+	VkFenceCreateInfo fenceInfo = {};
+	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fenceInfo.flags = 0;
+
+	VkFence fence;
+
+	if (vkCreateFence(device, &fenceInfo, nullptr, &fence) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create fence\n";
+		return 1;
+	}
+	if (vkQueueSubmit(base.GetGraphicsQueue(), 1, &submitInfo, fence) != VK_SUCCESS)
+	{
+		std::cout << "Failed to submit\n";
+		return 1;
+	}
+	if (vkWaitForFences(device, 1, &fence, VK_TRUE, 100000000000) != VK_SUCCESS)
+	{
+		std::cout << "wait failed\n";
+		return 1;
+	}
+
+	vkDestroyFence(device, fence, nullptr);
+
+	renderer.FreeCommandBuffer(cmdBuffer);
+
+	
 	float lastTime = 0.0f;
 	float deltaTime = 0.0f;
 
 	Camera camera;
 	camera.SetPosition(glm::vec3(0.0f, 0.5f, 1.5f));
-	camera.SetProjectionMatrix(85.0f, width, height, 0.1f, 10.0f);
+	camera.SetProjectionMatrix(85.0f, width, height, 0.1f, 20.0f);
 
 	glm::mat4 *camerasData = (glm::mat4*)malloc(static_cast<size_t>(cameraUBO.GetSize()));
 
