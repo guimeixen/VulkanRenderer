@@ -21,13 +21,19 @@ unsigned int height = 480;
 int main()
 {
 	const int MAX_FRAMES_IN_FLIGHT = 2;
+	
 	VkPipelineLayout pipelineLayout;
-	VkDescriptorSet buffersSet;
+	VkDescriptorSet globalBuffersSet;
+	VkDescriptorSet globalTexturesSet;
+
 	VkDescriptorSet modelSet;
 	VkDescriptorSet floorSet;
-	VKBuffer skyboxVB;
 	VkDescriptorSet skyboxSet;
+
+	VKBuffer skyboxVB;
+	
 	Model model;
+
 	InputManager inputManager;
 	Window window;
 	window.Init(&inputManager, width, height);
@@ -121,7 +127,7 @@ int main()
 		glm::mat4 lightSpaceMatrix;
 	};
 
-	// Buffers
+	// Global Buffers
 
 	VkDescriptorSetLayoutBinding cameraLayoutBinding = {};
 	cameraLayoutBinding.binding = 0;
@@ -142,7 +148,7 @@ int main()
 		return 1;
 	}
 
-	// Textures
+	// Global Textures
 
 	VkDescriptorSetLayoutBinding shadowMapLayoutBinding = {};
 	shadowMapLayoutBinding.binding = 0;
@@ -150,22 +156,39 @@ int main()
 	shadowMapLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	shadowMapLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-	VkDescriptorSetLayoutBinding userTextureLayoutBinding = {};
-	userTextureLayoutBinding.binding = 1;
-	userTextureLayoutBinding.descriptorCount = 1;
-	userTextureLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	userTextureLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-	VkDescriptorSetLayoutBinding texturesSetLayoutBindings[] = { shadowMapLayoutBinding, userTextureLayoutBinding };
+	VkDescriptorSetLayoutBinding texturesSetLayoutBindings[] = { shadowMapLayoutBinding };
 
 	VkDescriptorSetLayoutCreateInfo texturesSetLayoutInfo = {};
 	texturesSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	texturesSetLayoutInfo.bindingCount = 2;
+	texturesSetLayoutInfo.bindingCount = 1;
 	texturesSetLayoutInfo.pBindings = texturesSetLayoutBindings;
 
 	VkDescriptorSetLayout texturesSetLayout;
 
 	if (vkCreateDescriptorSetLayout(device, &texturesSetLayoutInfo, nullptr, &texturesSetLayout) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create textures descriptor set layout\n";
+		return 1;
+	}
+
+	// User Textures
+
+	VkDescriptorSetLayoutBinding userTextureLayoutBinding = {};
+	userTextureLayoutBinding.binding = 0;
+	userTextureLayoutBinding.descriptorCount = 1;
+	userTextureLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	userTextureLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkDescriptorSetLayoutBinding userTexturesSetLayoutBindings[] = { userTextureLayoutBinding };
+
+	VkDescriptorSetLayoutCreateInfo userTexturesSetLayoutInfo = {};
+	userTexturesSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	userTexturesSetLayoutInfo.bindingCount = 1;
+	userTexturesSetLayoutInfo.pBindings = userTexturesSetLayoutBindings;
+
+	VkDescriptorSetLayout userTexturesSetLayout;
+
+	if (vkCreateDescriptorSetLayout(device, &userTexturesSetLayoutInfo, nullptr, &userTexturesSetLayout) != VK_SUCCESS)
 	{
 		std::cout << "Failed to create textures descriptor set layout\n";
 		return 1;
@@ -185,7 +208,7 @@ int main()
 
 	VkDescriptorPoolCreateInfo descPoolInfo = {};
 	descPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	descPoolInfo.maxSets = 5;
+	descPoolInfo.maxSets = 6;
 	descPoolInfo.poolSizeCount = 2;
 	descPoolInfo.pPoolSizes = poolSizes;
 
@@ -204,8 +227,7 @@ int main()
 	setAllocInfo.descriptorSetCount = 1;
 	setAllocInfo.pSetLayouts = &buffersSetLayout;
 
-
-	if (vkAllocateDescriptorSets(device, &setAllocInfo, &buffersSet) != VK_SUCCESS)
+	if (vkAllocateDescriptorSets(device, &setAllocInfo, &globalBuffersSet) != VK_SUCCESS)
 	{
 		std::cout << "failed to allocate descriptor sets\n";
 		return 1;
@@ -213,22 +235,26 @@ int main()
 
 	setAllocInfo.descriptorSetCount = 1;
 	setAllocInfo.pSetLayouts = &texturesSetLayout;
+	if (vkAllocateDescriptorSets(device, &setAllocInfo, &globalTexturesSet) != VK_SUCCESS)
+	{
+		std::cout << "failed to allocate descriptor sets\n";
+		return 1;
+	}
+
+	setAllocInfo.descriptorSetCount = 1;
+	setAllocInfo.pSetLayouts = &userTexturesSetLayout;
 	if (vkAllocateDescriptorSets(device, &setAllocInfo, &modelSet) != VK_SUCCESS)
 	{
 		std::cout << "failed to allocate descriptor sets\n";
 		return 1;
 	}
 
-	setAllocInfo.descriptorSetCount = 1;
-	setAllocInfo.pSetLayouts = &texturesSetLayout;
 	if (vkAllocateDescriptorSets(device, &setAllocInfo, &floorSet) != VK_SUCCESS)
 	{
 		std::cout << "failed to allocate descriptor sets\n";
 		return 1;
 	}
 
-	setAllocInfo.descriptorSetCount = 1;
-	setAllocInfo.pSetLayouts = &texturesSetLayout;
 	if (vkAllocateDescriptorSets(device, &setAllocInfo, &skyboxSet) != VK_SUCCESS)
 	{
 		std::cout << "failed to allocate descriptor sets\n";
@@ -237,6 +263,7 @@ int main()
 
 	std::cout << "Allocated descriptor sets\n";
 
+	// Global buffers set update
 
 	VkDescriptorBufferInfo bufferInfo = {};
 	bufferInfo.buffer = cameraUBO.GetBuffer();
@@ -245,7 +272,7 @@ int main()
 
 	VkWriteDescriptorSet descWrite = {};
 	descWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	descWrite.dstSet = buffersSet;
+	descWrite.dstSet = globalBuffersSet;
 	descWrite.dstBinding = 0;
 	descWrite.dstArrayElement = 0;
 	descWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
@@ -254,81 +281,69 @@ int main()
 
 	vkUpdateDescriptorSets(device, 1, &descWrite, 0, nullptr);
 
+	// Global Textures set update
 
-	// Model
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
 	imageInfo.imageView = shadowFB.GetDepthTexture().GetImageView();
 	imageInfo.sampler = shadowFB.GetDepthTexture().GetSampler();
 
-	VkWriteDescriptorSet descriptorWrites[2] = {};
-	descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	descriptorWrites[0].dstSet = modelSet;
-	descriptorWrites[0].dstBinding = 0;
-	descriptorWrites[0].dstArrayElement = 0;
-	descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	descriptorWrites[0].descriptorCount = 1;
-	descriptorWrites[0].pImageInfo = &imageInfo;
+	VkWriteDescriptorSet shadowMapWrite = {};
+	shadowMapWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	shadowMapWrite.dstSet = globalTexturesSet;
+	shadowMapWrite.dstBinding = 0;
+	shadowMapWrite.dstArrayElement = 0;
+	shadowMapWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	shadowMapWrite.descriptorCount = 1;
+	shadowMapWrite.pImageInfo = &imageInfo;
+
+	vkUpdateDescriptorSets(device, 1, &shadowMapWrite, 0, nullptr);
+
+
+	// Model
 
 	VkDescriptorImageInfo imageInfo2 = {};
 	imageInfo2.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	imageInfo2.imageView = modelTexture.GetImageView();
 	imageInfo2.sampler = modelTexture.GetSampler();
 
-	descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	descriptorWrites[1].dstSet = modelSet;
-	descriptorWrites[1].dstBinding = 1;
-	descriptorWrites[1].dstArrayElement = 0;
-	descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	descriptorWrites[1].descriptorCount = 1;
-	descriptorWrites[1].pImageInfo = &imageInfo2;
+	VkWriteDescriptorSet descriptorWrites = {};
+	descriptorWrites.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrites.dstSet = modelSet;
+	descriptorWrites.dstBinding = 0;
+	descriptorWrites.dstArrayElement = 0;
+	descriptorWrites.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	descriptorWrites.descriptorCount = 1;
+	descriptorWrites.pImageInfo = &imageInfo2;
 
-	vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, nullptr);
+	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
 
 	// Floor
-	imageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-	imageInfo.imageView = shadowFB.GetDepthTexture().GetImageView();
-	imageInfo.sampler = shadowFB.GetDepthTexture().GetSampler();
-
-	descriptorWrites[0].dstSet = floorSet;
-	descriptorWrites[0].dstBinding = 0;
-	descriptorWrites[0].pImageInfo = &imageInfo;
-
 	imageInfo2.imageView = floorTexture.GetImageView();
 	imageInfo2.sampler = floorTexture.GetSampler();
 
-	descriptorWrites[1].dstSet = floorSet;
-	descriptorWrites[1].dstBinding = 1;
-	descriptorWrites[1].pImageInfo = &imageInfo2;
+	descriptorWrites.dstSet = floorSet;
+	descriptorWrites.pImageInfo = &imageInfo2;
 
-	vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, nullptr);
+	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
 
 
 	// Skybox
-	imageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
-	imageInfo.imageView = shadowFB.GetDepthTexture().GetImageView();
-	imageInfo.sampler = shadowFB.GetDepthTexture().GetSampler();
-
-	descriptorWrites[0].dstSet = skyboxSet;
-	descriptorWrites[0].dstBinding = 0;
-	descriptorWrites[0].pImageInfo = &imageInfo;
-
 	imageInfo2.imageView = cubemap.GetImageView();
 	imageInfo2.sampler = cubemap.GetSampler();
 
-	descriptorWrites[1].dstSet = skyboxSet;
-	descriptorWrites[1].dstBinding = 1;
-	descriptorWrites[1].pImageInfo = &imageInfo2;
+	descriptorWrites.dstSet = skyboxSet;
+	descriptorWrites.pImageInfo = &imageInfo2;
 
-	vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, nullptr);
+	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
 
 
 	// Create pipeline layout
-	VkDescriptorSetLayout setLayouts[] = { buffersSetLayout, texturesSetLayout };
+	VkDescriptorSetLayout setLayouts[] = { buffersSetLayout, texturesSetLayout, userTexturesSetLayout };
 
 	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 2;
+	pipelineLayoutInfo.setLayoutCount = 3;
 	pipelineLayoutInfo.pSetLayouts = setLayouts;
 	pipelineLayoutInfo.pushConstantRangeCount = 0;
 	pipelineLayoutInfo.pPushConstantRanges = nullptr;
@@ -564,23 +579,14 @@ int main()
 		return 1;
 	}
 
-	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-	imageInfo.imageView = shadowFB.GetDepthTexture().GetImageView();
-	imageInfo.sampler = shadowFB.GetDepthTexture().GetSampler();
-
-	descriptorWrites[0].dstSet = quadSet;
-	descriptorWrites[0].dstBinding = 0;
-	descriptorWrites[0].pImageInfo = &imageInfo;
 
 	imageInfo2.imageView = offscreenFB.GetFirstColorTexture().GetImageView();
 	imageInfo2.sampler = offscreenFB.GetFirstColorTexture().GetSampler();
 
-	descriptorWrites[1].dstSet = quadSet;
-	descriptorWrites[1].dstBinding = 1;
-	descriptorWrites[1].pImageInfo = &imageInfo2;
+	descriptorWrites.dstSet = quadSet;
+	descriptorWrites.pImageInfo = &imageInfo2;
 
-	vkUpdateDescriptorSets(device, 2, descriptorWrites, 0, nullptr);
+	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
 
 
 
@@ -645,7 +651,9 @@ int main()
 		// Bind the camera descriptor set with the ubo
 		//vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &buffersSet, 0, nullptr);
 		uint32_t dynamicOffset = static_cast<uint32_t>(currentCamera) * alignSingleUBOSize;
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &buffersSet, 1, &dynamicOffset);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &globalBuffersSet, 1, &dynamicOffset);
+
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &globalTexturesSet, 0, nullptr);
 
 		currentCamera++;
 
@@ -683,7 +691,7 @@ int main()
 		vertexBuffers[0] = model.GetVertexBuffer().GetBuffer();
 		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
 		vkCmdBindIndexBuffer(cmdBuffer, model.GetIndexBuffer().GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &modelSet, 0, nullptr);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &modelSet, 0, nullptr);
 		vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(model.GetIndexCount()), 1, 0, 0, 0);
 
 		vkCmdEndRenderPass(cmdBuffer);
@@ -702,7 +710,7 @@ int main()
 		}
 
 		dynamicOffset = static_cast<uint32_t>(currentCamera) * alignSingleUBOSize;
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &buffersSet, 1, &dynamicOffset);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &globalBuffersSet, 1, &dynamicOffset);
 
 		viewport.width = (float)surfaceExtent.width;
 		viewport.height = (float)surfaceExtent.height;
@@ -727,19 +735,19 @@ int main()
 		vertexBuffers[0] = model.GetVertexBuffer().GetBuffer();
 		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
 		vkCmdBindIndexBuffer(cmdBuffer, model.GetIndexBuffer().GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &modelSet, 0, nullptr);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &modelSet, 0, nullptr);
 		vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(model.GetIndexCount()), 1, 0, 0, 0);
 
 		vertexBuffers[0] = floorModel.GetVertexBuffer().GetBuffer();
 		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
 		vkCmdBindIndexBuffer(cmdBuffer, floorModel.GetIndexBuffer().GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &floorSet, 0, nullptr);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &floorSet, 0, nullptr);
 		vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(floorModel.GetIndexCount()), 1, 0, 0, 0);
 
 		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipeline.GetPipeline());
 		vertexBuffers[0] = skyboxVB.GetBuffer();
 		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &skyboxSet, 0, nullptr);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &skyboxSet, 0, nullptr);
 		vkCmdDraw(cmdBuffer, 36, 1, 0, 0);
 
 		vkCmdEndRenderPass(cmdBuffer);
@@ -748,7 +756,7 @@ int main()
 		renderer.BeginDefaultRenderPass();
 
 		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, postQuadPipeline.GetPipeline());
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &quadSet, 0, nullptr);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &quadSet, 0, nullptr);
 		vkCmdDraw(cmdBuffer, 3, 1, 0, 0);
 
 		renderer.EndDefaultRenderPass();
@@ -768,6 +776,7 @@ int main()
 
 	vkDestroyDescriptorSetLayout(device, buffersSetLayout, nullptr);
 	vkDestroyDescriptorSetLayout(device, texturesSetLayout, nullptr);
+	vkDestroyDescriptorSetLayout(device, userTexturesSetLayout, nullptr);
 
 	cameraUBO.Dispose(device);
 	offscreenFB.Dispose(device);
