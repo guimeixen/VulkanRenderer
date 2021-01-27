@@ -16,8 +16,10 @@ public:
 	void AcquireNextImage();
 	void Present(VkSemaphore computeSemaphore);
 
-	VkCommandBuffer CreateCommandBuffer(bool beginRecord);
-	void FreeCommandBuffer(VkCommandBuffer cmdBuffer);
+	VkCommandBuffer CreateGraphicsCommandBuffer(bool beginRecord);
+	VkCommandBuffer CreateComputeCommandBuffer(bool beginRecord);
+	void FreeGraphicsCommandBuffer(VkCommandBuffer cmdBuffer);
+	void FreeComputeCommandBuffer(VkCommandBuffer cmdBuffer);
 
 	void BeginCmdRecording();
 	void BeginDefaultRenderPass();

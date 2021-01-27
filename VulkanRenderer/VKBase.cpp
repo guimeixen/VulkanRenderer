@@ -19,7 +19,8 @@ VKBase::VKBase()
 	showAvailableExtensions = false;
 	showMemoryProperties = false;
 
-	cmdPool = VK_NULL_HANDLE;
+	graphicsCmdPool = VK_NULL_HANDLE;
+	computeCmdPool = VK_NULL_HANDLE;
 
 	physicalDeviceMemoryProperties = {};
 
@@ -54,7 +55,9 @@ bool VKBase::Init(GLFWwindow* window, unsigned int width, unsigned int height, b
 		return false;
 	if (!CreateSwapchain(width, height))
 		return false;
-	if (!CreateCommandPool())
+	if (!CreateGraphicsCommandPool())
+		return false;
+	if (!CreateComputeCommandPool())			// Create separate command pool because the queue family could be different from graphics
 		return false;
 
 	return true;
@@ -62,7 +65,11 @@ bool VKBase::Init(GLFWwindow* window, unsigned int width, unsigned int height, b
 
 void VKBase::Dispose()
 {
-	vkDestroyCommandPool(device, cmdPool, nullptr);
+	if (graphicsCmdPool != VK_NULL_HANDLE)
+		vkDestroyCommandPool(device, graphicsCmdPool, nullptr);
+
+	if(computeCmdPool != VK_NULL_HANDLE)
+		vkDestroyCommandPool(device, computeCmdPool, nullptr);
 
 	for (size_t i = 0; i < swapChainImageViews.size(); i++)
 	{
@@ -97,7 +104,7 @@ VkCommandBuffer VKBase::BeginSingleUseCmdBuffer()
 	VkCommandBufferAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-	allocInfo.commandPool = cmdPool;
+	allocInfo.commandPool = graphicsCmdPool;
 	allocInfo.commandBufferCount = 1;
 
 	VkCommandBuffer cmdBuffer;
@@ -137,7 +144,7 @@ bool VKBase::EndSingleUseCmdBuffer(VkCommandBuffer cmdBuffer)
 	vkQueueSubmit(graphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
 	vkQueueWaitIdle(graphicsQueue);
 
-	vkFreeCommandBuffers(device, cmdPool, 1, &cmdBuffer);
+	vkFreeCommandBuffers(device, graphicsCmdPool, 1, &cmdBuffer);
 
 	return true;
 }
@@ -630,19 +637,36 @@ bool VKBase::CreateSwapchain(unsigned int width, unsigned int height)
 	return true;
 }
 
-bool VKBase::CreateCommandPool()
+bool VKBase::CreateGraphicsCommandPool()
 {
 	VkCommandPoolCreateInfo cmdPoolCreateInfo = {};
 	cmdPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
 	cmdPoolCreateInfo.queueFamilyIndex = queueIndices.graphicsFamilyIndex;
 	cmdPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
 
-	if (vkCreateCommandPool(device, &cmdPoolCreateInfo, nullptr, &cmdPool) != VK_SUCCESS)
+	if (vkCreateCommandPool(device, &cmdPoolCreateInfo, nullptr, &graphicsCmdPool) != VK_SUCCESS)
 	{
 		std::cout << "Failed to create command pool\n";
 		return false;
 	}
-	std::cout << "Command pool created\n";
+	std::cout << "Graphics command pool created\n";
+
+	return true;
+}
+
+bool VKBase::CreateComputeCommandPool()
+{
+	VkCommandPoolCreateInfo cmdPoolCreateInfo = {};
+	cmdPoolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+	cmdPoolCreateInfo.queueFamilyIndex = queueIndices.computeFamilyIndex;
+	cmdPoolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+
+	if (vkCreateCommandPool(device, &cmdPoolCreateInfo, nullptr, &computeCmdPool) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create command pool\n";
+		return false;
+	}
+	std::cout << "Compute command pool created\n";
 
 	return true;
 }

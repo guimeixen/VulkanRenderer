@@ -28,7 +28,8 @@ public:
 	VkQueue GetComputeQueue() const { return computeQueue; }
 	VkQueue GetTransferQueue() const { return transferQueue; }
 	VkSwapchainKHR GetSwapchain() const { return swapchain; }
-	VkCommandPool GetCommandPool() const { return cmdPool; }
+	VkCommandPool GetGraphicsCommandPool() const { return graphicsCmdPool; }
+	VkCommandPool GetComputeCommandPool() const { return computeCmdPool; }
 
 	const VkPhysicalDeviceMemoryProperties &GetPhysicalDeviceMemoryProperties() const { return physicalDeviceMemoryProperties; }
 	const VkPhysicalDeviceLimits& GetPhysicalDeviceLimits() const { return physicalDeviceProperties.limits; }
@@ -46,7 +47,8 @@ private:
 	bool ChoosePhysicalDevice();
 	bool CreateDevice(VkSurfaceKHR surface);
 	bool CreateSwapchain(unsigned int width, unsigned int height);
-	bool CreateCommandPool();
+	bool CreateGraphicsCommandPool();
+	bool CreateComputeCommandPool();
 
 	VkCommandBuffer BeginSingleUseCmdBuffer();
 	bool EndSingleUseCmdBuffer(VkCommandBuffer cmdBuffer);
@@ -76,5 +78,6 @@ private:
 	std::vector<VkImage> swapChainImages;
 	std::vector<VkImageView> swapChainImageViews;
 
-	VkCommandPool cmdPool;
+	VkCommandPool graphicsCmdPool;
+	VkCommandPool computeCmdPool;
 };

@@ -67,7 +67,7 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 
 	VkCommandBufferAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	allocInfo.commandPool = base.GetCommandPool();
+	allocInfo.commandPool = base.GetGraphicsCommandPool();
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	allocInfo.commandBufferCount = (uint32_t)cmdBuffers.size();
 
@@ -129,7 +129,7 @@ void VKRenderer::AcquireNextImage()
 
 		vkDestroyRenderPass(device, renderPass, nullptr);
 
-		vkFreeCommandBuffers(device, base.GetCommandPool(), static_cast<uint32_t>(cmdBuffers.size()), cmdBuffers.data());
+		vkFreeCommandBuffers(device, base.GetGraphicsCommandPool(), static_cast<uint32_t>(cmdBuffers.size()), cmdBuffers.data());
 
 		base.RecreateSwapchain(width, height);
 		CreateRenderPass(base, renderPass, depthTexture.GetFormat());
@@ -203,7 +203,7 @@ void VKRenderer::Present(VkSemaphore computeSemaphore)
 
 		vkDestroyRenderPass(device, renderPass, nullptr);
 
-		vkFreeCommandBuffers(device, base.GetCommandPool(), static_cast<uint32_t>(cmdBuffers.size()), cmdBuffers.data());
+		vkFreeCommandBuffers(device, base.GetGraphicsCommandPool(), static_cast<uint32_t>(cmdBuffers.size()), cmdBuffers.data());
 
 		base.RecreateSwapchain(width, height);
 		CreateRenderPass(base, renderPass, depthTexture.GetFormat());
@@ -213,11 +213,11 @@ void VKRenderer::Present(VkSemaphore computeSemaphore)
 	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
-VkCommandBuffer VKRenderer::CreateCommandBuffer(bool beginRecord)
+VkCommandBuffer VKRenderer::CreateGraphicsCommandBuffer(bool beginRecord)
 {
 	VkCommandBufferAllocateInfo allocInfo = {};
 	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-	allocInfo.commandPool = base.GetCommandPool();
+	allocInfo.commandPool = base.GetGraphicsCommandPool();
 	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
 	allocInfo.commandBufferCount = 1;
 
@@ -245,9 +245,46 @@ VkCommandBuffer VKRenderer::CreateCommandBuffer(bool beginRecord)
 	return cmdBuffer;
 }
 
-void VKRenderer::FreeCommandBuffer(VkCommandBuffer cmdBuffer)
+VkCommandBuffer VKRenderer::CreateComputeCommandBuffer(bool beginRecord)
 {
-	vkFreeCommandBuffers(base.GetDevice(), base.GetCommandPool(), 1, &cmdBuffer);
+	VkCommandBufferAllocateInfo allocInfo = {};
+	allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+	allocInfo.commandPool = base.GetComputeCommandPool();
+	allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+	allocInfo.commandBufferCount = 1;
+
+	VkCommandBuffer cmdBuffer;
+
+	if (vkAllocateCommandBuffers(base.GetDevice(), &allocInfo, &cmdBuffer) != VK_SUCCESS)
+	{
+		std::cout << "Failed to allocate command buffer!\n";
+		return VK_NULL_HANDLE;
+	}
+
+	if (beginRecord)
+	{
+		VkCommandBufferBeginInfo beginInfo = {};
+		beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+		beginInfo.flags = 0;
+
+		if (vkBeginCommandBuffer(cmdBuffer, &beginInfo) != VK_SUCCESS)
+		{
+			std::cout << "Failed to begin command buffer!\n";
+			return VK_NULL_HANDLE;
+		}
+	}
+
+	return cmdBuffer;
+}
+
+void VKRenderer::FreeGraphicsCommandBuffer(VkCommandBuffer cmdBuffer)
+{
+	vkFreeCommandBuffers(base.GetDevice(), base.GetGraphicsCommandPool(), 1, &cmdBuffer);
+}
+
+void VKRenderer::FreeComputeCommandBuffer(VkCommandBuffer cmdBuffer)
+{
+	vkFreeCommandBuffers(base.GetDevice(), base.GetComputeCommandPool(), 1, &cmdBuffer);
 }
 
 void VKRenderer::BeginCmdRecording()

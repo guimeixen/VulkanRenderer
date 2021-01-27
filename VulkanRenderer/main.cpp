@@ -871,7 +871,7 @@ int main()
 	}
 
 	// Record the compute command buffer
-	VkCommandBuffer computeCmdBuffer = renderer.CreateCommandBuffer(true);
+	VkCommandBuffer computeCmdBuffer = renderer.CreateComputeCommandBuffer(true);
 
 	vkCmdBindPipeline(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
 	vkCmdBindDescriptorSets(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeSet, 0, nullptr);
@@ -884,7 +884,7 @@ int main()
 
 	// Create mipmaps
 
-	VkCommandBuffer cmdBuffer = renderer.CreateCommandBuffer(true);
+	VkCommandBuffer cmdBuffer = renderer.CreateGraphicsCommandBuffer(true);
 
 	CreateMipMaps(cmdBuffer, modelTexture);
 	CreateMipMaps(cmdBuffer, floorTexture);
@@ -923,7 +923,7 @@ int main()
 
 	vkDestroyFence(device, fence, nullptr);
 
-	renderer.FreeCommandBuffer(cmdBuffer);
+	renderer.FreeGraphicsCommandBuffer(cmdBuffer);
 
 	float lastTime = 0.0f;
 	float deltaTime = 0.0f;
