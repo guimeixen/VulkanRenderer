@@ -17,7 +17,7 @@ VKTexture2D::VKTexture2D()
 	params = {};
 }
 
-bool VKTexture2D::LoadFromFile(const std::string& path, VKBase &base, const TextureParams& textureParams)
+bool VKTexture2D::LoadFromFile(VKBase& base, const std::string& path, const TextureParams& textureParams)
 {
 	params = textureParams;
 	textureType = TextureType::TEXTURE_2D;
@@ -102,7 +102,7 @@ bool VKTexture2D::LoadFromFile(const std::string& path, VKBase &base, const Text
 	return true;
 }
 
-bool VKTexture2D::LoadCubemapFromFiles(const std::vector<std::string>& facesPath, VKBase& base, const TextureParams& textureParams)
+bool VKTexture2D::LoadCubemapFromFiles(VKBase& base, const std::vector<std::string>& facesPath, const TextureParams& textureParams)
 {
 	params = textureParams;
 	textureType = TextureType::TEXTURE_CUBE;
@@ -427,6 +427,87 @@ bool VKTexture2D::CreateColorTexture(const VKBase &base, const TextureParams& te
 	if (!CreateImageView(device, VK_IMAGE_ASPECT_COLOR_BIT))
 		return false;
 	if (!CreateSampler(device))
+		return false;
+
+	return true;
+}
+
+bool VKTexture2D::CreateWithData(VKBase& base, const TextureParams& textureParams, unsigned int width, unsigned int height, const void* data)
+{
+	params = textureParams;
+	textureType = TextureType::TEXTURE_2D;
+	mipLevels = 1;
+	this->width = width;
+	this->height = height;
+
+	// Make sure the format supports storage
+	VkFormatProperties props;
+	vkGetPhysicalDeviceFormatProperties(base.GetPhysicalDevice(), params.format, &props);
+
+	if (!(props.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT))
+	{
+		std::cout << "Format requested for storage image doesn't support storage\n";
+		return false;
+	}
+
+	VkImageCreateInfo imageCreateInfo = {};
+	imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+	imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+	imageCreateInfo.format = params.format;
+	imageCreateInfo.extent.width = static_cast<uint32_t>(width);
+	imageCreateInfo.extent.height = static_cast<uint32_t>(height);
+	imageCreateInfo.extent.depth = 1;
+	imageCreateInfo.mipLevels = 1;
+	imageCreateInfo.arrayLayers = 1;
+	imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+	imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+	imageCreateInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	const vkutils::QueueFamilyIndices queueIndices = base.GetQueueFamilyIndices();
+
+	// If the graphics andcompute queues are different, we create an image that can be shared between them
+	// Performance can be worse than exclusive sharing mode, but we save some synchronization to keep this simple
+	if (queueIndices.graphicsFamilyIndex != queueIndices.computeFamilyIndex)
+	{
+		uint32_t indices[] = { queueIndices.graphicsFamilyIndex, queueIndices.computeFamilyIndex };
+
+		imageCreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
+		imageCreateInfo.queueFamilyIndexCount = 2;
+		imageCreateInfo.pQueueFamilyIndices = indices;
+	}
+	else
+	{
+		imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+	}
+
+	VkDevice device = base.GetDevice();
+
+	if (vkCreateImage(device, &imageCreateInfo, nullptr, &image) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create image\n";
+		return false;
+	}
+
+	VkMemoryRequirements imageMemReqs;
+	vkGetImageMemoryRequirements(device, image, &imageMemReqs);
+
+	VkMemoryAllocateInfo imgAllocInfo = {};
+	imgAllocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+	imgAllocInfo.memoryTypeIndex = vkutils::FindMemoryType(base.GetPhysicalDeviceMemoryProperties(), imageMemReqs.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	imgAllocInfo.allocationSize = imageMemReqs.size;
+
+	if (vkAllocateMemory(device, &imgAllocInfo, nullptr, &memory) != VK_SUCCESS)
+	{
+		std::cout << "Failed to allocate image memory\n";
+		return false;
+	}
+
+	vkBindImageMemory(device, image, memory, 0);
+
+	base.TransitionImageLayout(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+
+	if (!CreateImageView(device, VK_IMAGE_ASPECT_COLOR_BIT))
 		return false;
 
 	return true;

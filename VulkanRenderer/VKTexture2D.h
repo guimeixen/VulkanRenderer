@@ -21,11 +21,12 @@ class VKTexture2D
 public:
 	VKTexture2D();
 
-	bool LoadFromFile(const std::string &path, VKBase &base, const TextureParams &textureParams);
-	bool LoadCubemapFromFiles(const std::vector<std::string>& facesPath, VKBase& base, const TextureParams& textureParams);
+	bool LoadFromFile(VKBase& base, const std::string& path, const TextureParams &textureParams);
+	bool LoadCubemapFromFiles(VKBase& base, const std::vector<std::string>& facesPath, const TextureParams& textureParams);
 	bool CreateDepthTexture(const VKBase &base, const TextureParams& textureParams, unsigned int width, unsigned int height, bool sampled);
 	// Right now the function assumes the color texture will be sampled
 	bool CreateColorTexture(const VKBase& base, const TextureParams& textureParams, unsigned int width, unsigned int height);
+	bool CreateWithData(VKBase& base, const TextureParams& textureParams, unsigned int width, unsigned int height, const void* data);
 	void Dispose(VkDevice device);
 
 	VkImage GetImage() const { return image; }

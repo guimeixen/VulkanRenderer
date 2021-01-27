@@ -1,11 +1,13 @@
 #include "Window.h"
 #include "Input.h"
+#include "Random.h"
 #include "Camera.h"
 #include "VKRenderer.h"
 #include "Model.h"
 #include "VertexTypes.h"
 #include "VKFramebuffer.h"
 #include "VKPipeline.h"
+#include "ParticleSystem.h"
 
 #include "glm/gtc/matrix_transform.hpp"
 
@@ -100,11 +102,13 @@ int main()
 	VkDescriptorSet modelSet;
 	VkDescriptorSet floorSet;
 	VkDescriptorSet skyboxSet;
+	VkDescriptorSet psSet;
 
 	VKBuffer skyboxVB;
 	
 	Model model;
 
+	Random::Init();
 	InputManager inputManager;
 	Window window;
 	window.Init(&inputManager, width, height);
@@ -163,7 +167,7 @@ int main()
 	textureParams.filter = VK_FILTER_LINEAR;
 
 	VKTexture2D modelTexture;
-	modelTexture.LoadFromFile("Data/Models/trash_can_d.jpg", base, textureParams);
+	modelTexture.LoadFromFile(base, "Data/Models/trash_can_d.jpg", textureParams);
 
 	model.Load("Data/Models/trash_can.obj", base);
 
@@ -171,7 +175,7 @@ int main()
 	floorModel.Load("Data/Models/floor.obj", base);
 
 	VKTexture2D floorTexture;
-	floorTexture.LoadFromFile("Data/Models/floor.jpg", base, textureParams);
+	floorTexture.LoadFromFile(base, "Data/Models/floor.jpg", textureParams);
 
 	// Load cubemap
 	std::vector<std::string> faces(6);
@@ -188,7 +192,12 @@ int main()
 	cubemapParams.filter = VK_FILTER_LINEAR;
 
 	VKTexture2D cubemap;
-	cubemap.LoadCubemapFromFiles(faces, base, cubemapParams);
+	cubemap.LoadCubemapFromFiles(base, faces, cubemapParams);
+
+	ParticleSystem particleSystem;
+	if (!particleSystem.Init(base, "Data/Textures/particleTexture.png", 10))
+		return false;
+
 
 	struct CameraUBO
 	{
@@ -270,17 +279,20 @@ int main()
 	VKBuffer cameraUBO;
 	cameraUBO.Create(&base, sizeof(CameraUBO) * 2, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-	VkDescriptorPoolSize poolSizes[2] = {};
+	VkDescriptorPoolSize poolSizes[3] = {};
 	poolSizes[0].descriptorCount = 1;
 	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 
 	poolSizes[1].descriptorCount = 10;
 	poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
+	poolSizes[2].descriptorCount = 1;
+	poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+
 	VkDescriptorPoolCreateInfo descPoolInfo = {};
 	descPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	descPoolInfo.maxSets = 6;
-	descPoolInfo.poolSizeCount = 2;
+	descPoolInfo.maxSets = 8;
+	descPoolInfo.poolSizeCount = 3;
 	descPoolInfo.pPoolSizes = poolSizes;
 
 	VkDescriptorPool descriptorPool;
@@ -327,6 +339,12 @@ int main()
 	}
 
 	if (vkAllocateDescriptorSets(device, &setAllocInfo, &skyboxSet) != VK_SUCCESS)
+	{
+		std::cout << "failed to allocate descriptor sets\n";
+		return 1;
+	}
+
+	if (vkAllocateDescriptorSets(device, &setAllocInfo, &psSet) != VK_SUCCESS)
 	{
 		std::cout << "failed to allocate descriptor sets\n";
 		return 1;
@@ -404,6 +422,15 @@ int main()
 	imageInfo2.sampler = cubemap.GetSampler();
 
 	descriptorWrites.dstSet = skyboxSet;
+	descriptorWrites.pImageInfo = &imageInfo2;
+
+	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
+
+	// Particle system
+	imageInfo2.imageView = particleSystem.GetTexture().GetImageView();
+	imageInfo2.sampler = particleSystem.GetTexture().GetSampler();
+
+	descriptorWrites.dstSet = psSet;
 	descriptorWrites.pImageInfo = &imageInfo2;
 
 	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
@@ -659,6 +686,206 @@ int main()
 
 	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
 
+	// Particle system pipeline
+
+	// Pipeline
+
+	VkVertexInputBindingDescription psBindingDesc[2] = {};
+	psBindingDesc[0].binding = 0;
+	psBindingDesc[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	psBindingDesc[0].stride = sizeof(glm::vec4);
+	psBindingDesc[1].binding = 1;
+	psBindingDesc[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
+	psBindingDesc[1].stride = sizeof(ParticleInstanceData);
+
+	VkVertexInputAttributeDescription psAttribDesc[3] = {};
+	psAttribDesc[0].binding = 0;
+	psAttribDesc[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	psAttribDesc[0].location = 0;
+	psAttribDesc[0].offset = 0;
+
+	psAttribDesc[1].binding = 1;
+	psAttribDesc[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	psAttribDesc[1].location = 1;
+	psAttribDesc[1].offset = 0;
+
+	psAttribDesc[2].binding = 1;
+	psAttribDesc[2].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	psAttribDesc[2].location = 2;
+	psAttribDesc[2].offset = offsetof(ParticleInstanceData, color);
+
+	// Don't write depth
+	pipeInfo.depthStencilState.depthWriteEnable = VK_FALSE;
+
+	colorBlendAttachment = {};
+	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	colorBlendAttachment.blendEnable = VK_TRUE;
+	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+
+	pipeInfo.vertexInput.vertexBindingDescriptionCount = 2;
+	pipeInfo.vertexInput.pVertexBindingDescriptions = psBindingDesc;
+	pipeInfo.vertexInput.vertexAttributeDescriptionCount = 3;
+	pipeInfo.vertexInput.pVertexAttributeDescriptions = psAttribDesc;
+
+	pipeInfo.colorBlending.attachmentCount = 1;
+	pipeInfo.colorBlending.pAttachments = &colorBlendAttachment;
+
+	VKShader psShader;
+	psShader.LoadShader(device, "Data/Shaders/particle_vert.spv", "Data/Shaders/particle_frag.spv");
+
+	VKPipeline psPipeline;
+	if (!psPipeline.Create(device, pipeInfo, pipelineLayout, psShader, offscreenFB.GetRenderPass()))
+		return 1;
+
+	// Compute
+
+	TextureParams storageTexParams = {};
+	// storageTexParams.addressMod
+	storageTexParams.format = VK_FORMAT_R8G8B8A8_UNORM;
+
+	VKTexture2D storageTexture;
+	storageTexture.CreateWithData(base, storageTexParams, 256, 256, nullptr);
+
+	VkDescriptorSetLayoutBinding computeSetLayoutBinding = {};
+	computeSetLayoutBinding.binding = 0;
+	computeSetLayoutBinding.descriptorCount = 1;
+	computeSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	computeSetLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
+
+	VkDescriptorSetLayoutCreateInfo computeSetLayoutInfo = {};
+	computeSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	computeSetLayoutInfo.bindingCount = 1;
+	computeSetLayoutInfo.pBindings = &computeSetLayoutBinding;
+
+	VkDescriptorSetLayout computeSetLayout;
+
+	if (vkCreateDescriptorSetLayout(device, &computeSetLayoutInfo, nullptr, &computeSetLayout) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create descriptor set layout\n";
+		return 1;
+	}	
+
+	VkPipelineLayoutCreateInfo computePipeLayoutInfo = {};
+	computePipeLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	computePipeLayoutInfo.setLayoutCount = 1;
+	computePipeLayoutInfo.pSetLayouts = &computeSetLayout;
+
+	VkPipelineLayout computePipelineLayout;
+
+	if (vkCreatePipelineLayout(device, &computePipeLayoutInfo, nullptr, &computePipelineLayout) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create pipeline layout\n";
+		return 1;
+	}
+
+	VkDescriptorSet computeSet;
+
+	setAllocInfo.descriptorSetCount = 1;
+	setAllocInfo.pSetLayouts = &computeSetLayout;
+
+	if (vkAllocateDescriptorSets(device, &setAllocInfo, &computeSet) != VK_SUCCESS)
+	{
+		std::cout << "Failed to allocate descriptor set\n";
+		return 1;
+	}
+
+	VkDescriptorImageInfo compImgInfo = {};
+	compImgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+	compImgInfo.imageView = storageTexture.GetImageView();
+	//compImgInfo.sampler = ;
+
+	VkWriteDescriptorSet computeWrite = {};
+	computeWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	computeWrite.descriptorCount = 1;
+	computeWrite.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+	computeWrite.dstArrayElement = 0;
+	computeWrite.dstBinding = 0;
+	computeWrite.dstSet = computeSet;
+	computeWrite.pImageInfo = &compImgInfo;
+
+	vkUpdateDescriptorSets(device, 1, &computeWrite, 0, nullptr);
+
+
+	VKShader computeShader;
+	if (!computeShader.LoadShader(device, "Data/Shaders/compute.spv"))
+	{
+		std::cout << "Failed to create compute shader\n";
+		return 1;
+	}
+
+	VkPipelineShaderStageCreateInfo computeStageInfo = computeShader.GetComputeStageInfo();
+
+	VkComputePipelineCreateInfo computePipeInfo = {};
+	computePipeInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+	computePipeInfo.layout = computePipelineLayout;
+	computePipeInfo.stage = computeStageInfo;
+
+	VkPipeline computePipeline;
+
+	if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &computePipeInfo, nullptr, &computePipeline) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create compute pipeline\n";
+		return 1;
+	}
+	
+	// Semaphore for compute and graphics sync
+	VkSemaphoreCreateInfo computeSemaphoreInfo = {};
+	computeSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+
+	VkSemaphore computeSemaphore;
+
+	if (vkCreateSemaphore(device, &computeSemaphoreInfo, nullptr, &computeSemaphore) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create compute semaphore\n";
+		return 1;
+	}
+
+	// Signal the semaphore
+	/*VkSubmitInfo semaInfo = {};
+	semaInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	semaInfo.signalSemaphoreCount = 1;
+	semaInfo.pSignalSemaphores = &computeSemaphore;
+
+	if (vkQueueSubmit(base.GetComputeQueue(), 1, &semaInfo, VK_NULL_HANDLE) != VK_SUCCESS)
+	{
+		std::cout << "Failed to submit\n";
+		return 1;
+	}
+	vkQueueWaitIdle(base.GetComputeQueue());*/
+
+	VkFenceCreateInfo fenceInfo = {};
+	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fenceInfo.flags = 0;
+
+	std::vector<VkFence> computeFences(2);
+
+	if (vkCreateFence(device, &fenceInfo, nullptr, &computeFences[0]) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create fence\n";
+		return 1;
+	}
+	if (vkCreateFence(device, &fenceInfo, nullptr, &computeFences[1]) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create fence\n";
+		return 1;
+	}
+
+	// Record the compute command buffer
+	VkCommandBuffer computeCmdBuffer = renderer.CreateCommandBuffer(true);
+
+	vkCmdBindPipeline(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
+	vkCmdBindDescriptorSets(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeSet, 0, nullptr);
+	vkCmdDispatch(computeCmdBuffer, 256 / 16, 256 / 16, 1);
+
+	vkEndCommandBuffer(computeCmdBuffer);
+
+
+
 
 	// Create mipmaps
 
@@ -666,6 +893,7 @@ int main()
 
 	CreateMipMaps(cmdBuffer, modelTexture);
 	CreateMipMaps(cmdBuffer, floorTexture);
+	CreateMipMaps(cmdBuffer, particleSystem.GetTexture());
 
 	if (vkEndCommandBuffer(cmdBuffer) != VK_SUCCESS)
 	{
@@ -677,10 +905,6 @@ int main()
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &cmdBuffer;
-
-	VkFenceCreateInfo fenceInfo = {};
-	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-	fenceInfo.flags = 0;
 
 	VkFence fence;
 
@@ -704,7 +928,6 @@ int main()
 
 	renderer.FreeCommandBuffer(cmdBuffer);
 
-	
 	float lastTime = 0.0f;
 	float deltaTime = 0.0f;
 
@@ -758,6 +981,8 @@ int main()
 
 
 		renderer.WaitForFrameFences();
+
+
 
 		renderer.BeginCmdRecording();
 
@@ -859,11 +1084,23 @@ int main()
 		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &floorSet, 0, nullptr);
 		vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(floorModel.GetIndexCount()), 1, 0, 0, 0);
 
+
+		// Render skybox as last
 		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipeline.GetPipeline());
 		vertexBuffers[0] = skyboxVB.GetBuffer();
 		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
 		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &skyboxSet, 0, nullptr);
 		vkCmdDraw(cmdBuffer, 36, 1, 0, 0);
+
+		// Particle system
+		VkBuffer psVbs[] = { particleSystem.GetQuadVertexBuffer().GetBuffer(), particleSystem.GetInstancingBuffer().GetBuffer() };
+		VkDeviceSize psVbsOffsets[] = { 0,0 };
+
+		vkCmdBindVertexBuffers(cmdBuffer, 0, 2, psVbs, psVbsOffsets);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &psSet, 0, nullptr);
+		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, psPipeline.GetPipeline());
+		vkCmdDraw(cmdBuffer, 6, particleSystem.GetNumAliveParticles(), 0, 0);
+
 
 		vkCmdEndRenderPass(cmdBuffer);
 
@@ -881,7 +1118,37 @@ int main()
 		memcpy(mapped, camerasData, static_cast<size_t>(currentCamera + 1) * alignSingleUBOSize);
 		cameraUBO.Unmap(device);
 
-		renderer.Present();
+		particleSystem.Update(deltaTime);
+		const std::vector<ParticleInstanceData> &psData = particleSystem.GetInstanceData();
+
+		VKBuffer& instancingBuffer = particleSystem.GetInstancingBuffer();
+		mapped = instancingBuffer.Map(device, 0, VK_WHOLE_SIZE);
+		memcpy(mapped, psData.data(), psData.size() * sizeof(ParticleInstanceData));
+		instancingBuffer.Unmap(device);
+
+		
+		renderer.AcquireNextImage();
+
+		VkSemaphore renderFinishedSemaphore = renderer.GetImageAvailableSemaphore();
+		VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+
+		VkSubmitInfo computeSubmitInfo = {};
+		computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		computeSubmitInfo.waitSemaphoreCount = 1;
+		computeSubmitInfo.pWaitSemaphores = &renderFinishedSemaphore;
+		computeSubmitInfo.pWaitDstStageMask = &waitStage;
+		computeSubmitInfo.commandBufferCount = 1;
+		computeSubmitInfo.pCommandBuffers = &computeCmdBuffer;
+		computeSubmitInfo.signalSemaphoreCount = 1;
+		computeSubmitInfo.pSignalSemaphores = &computeSemaphore;
+
+		if (vkQueueSubmit(base.GetComputeQueue(), 1, &computeSubmitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
+		{
+			std::cout << "Failed to submit\n";
+			return 1;
+		}
+
+		renderer.Present(computeSemaphore);
 	}
 
 	vkDeviceWaitIdle(device);
@@ -897,6 +1164,8 @@ int main()
 	offscreenFB.Dispose(device);
 	shadowFB.Dispose(device);
 	
+	particleSystem.Dispose(device);
+
 	cubemap.Dispose(device);
 	modelTexture.Dispose(device);
 	model.Dispose(device);
@@ -908,11 +1177,13 @@ int main()
 	skyboxShader.Dispose(device);
 	postQuadShader.Dispose(device);
 	shadowShader.Dispose(device);
+	psShader.Dispose(device);
 
 	modelPipeline.Dispose(device);
 	skyboxPipeline.Dispose(device);
 	postQuadPipeline.Dispose(device);
 	shadowPipeline.Dispose(device);
+	psPipeline.Dispose(device);
 
 	vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);

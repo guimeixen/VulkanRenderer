@@ -2,6 +2,8 @@
 
 #include "VKUtils.h"
 
+#include <GLFW/glfw3.h>
+
 #include <iostream>
 #include <set>
 
@@ -290,6 +292,14 @@ bool VKBase::TransitionImageLayout(VkImage image, VkImageLayout currentLayout, V
 		srcStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 		dstStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
 	}
+	else if (currentLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_GENERAL)
+	{
+		barrier.srcAccessMask = 0;
+		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT | VK_ACCESS_SHADER_WRITE_BIT;
+
+		srcStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+		dstStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;		// How to know if we're using it in the compute or fragment, vertex, etc? Pass something as parameter?
+	}
 
 	vkCmdPipelineBarrier(cmdBuffer, srcStage, dstStage, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
@@ -455,7 +465,7 @@ bool VKBase::ChoosePhysicalDevice()
 
 bool VKBase::CreateDevice(VkSurfaceKHR surface)
 {
-	queueIndices = vkutils::FindQueueFamilies(physicalDevice, surface, false, false);
+	queueIndices = vkutils::FindQueueFamilies(physicalDevice, surface, false, true);
 
 	std::cout << "Graphics queue index: " << queueIndices.graphicsFamilyIndex << '\n';
 	std::cout << "Present queue index: " << queueIndices.presentFamilyIndex << '\n';

@@ -13,7 +13,8 @@ public:
 	bool Init(GLFWwindow* window, unsigned int width, unsigned int height);
 	void Dispose();
 	void WaitForFrameFences();
-	void Present();
+	void AcquireNextImage();
+	void Present(VkSemaphore computeSemaphore);
 
 	VkCommandBuffer CreateCommandBuffer(bool beginRecord);
 	void FreeCommandBuffer(VkCommandBuffer cmdBuffer);
@@ -28,6 +29,8 @@ public:
 	const std::vector<VkFramebuffer> GetFramebuffers() const { return framebuffers; }
 	VkCommandBuffer GetCurrentCmdBuffer() const { return cmdBuffers[currentFrame]; }
 	unsigned int GetCurrentFrame() const { return currentFrame; }
+	VkSemaphore GetRenderFinishedSemaphore() const { return renderFinishedSemaphores[currentFrame]; }
+	VkSemaphore GetImageAvailableSemaphore() const { return imageAvailableSemaphores[currentFrame]; }
 
 private:
 	bool CreateRenderPass(const VKBase& base, VkRenderPass& renderPass, VkFormat depthFormat);

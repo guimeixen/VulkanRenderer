@@ -151,6 +151,9 @@
     <ClCompile Include="main.cpp" />
     <ClCompile Include="Material.cpp" />
     <ClCompile Include="Model.cpp" />
+    <ClCompile Include="ModelManager.cpp" />
+    <ClCompile Include="ParticleSystem.cpp" />
+    <ClCompile Include="Random.cpp" />
     <ClCompile Include="stb.cpp" />
     <ClCompile Include="VKBase.cpp" />
     <ClCompile Include="VKBuffer.cpp" />
@@ -167,6 +170,9 @@
     <ClInclude Include="Input.h" />
     <ClInclude Include="Material.h" />
     <ClInclude Include="Model.h" />
+    <ClInclude Include="ModelManager.h" />
+    <ClInclude Include="ParticleSystem.h" />
+    <ClInclude Include="Random.h" />
     <ClInclude Include="VertexTypes.h" />
     <ClInclude Include="VKBase.h" />
     <ClInclude Include="VKBuffer.h" />

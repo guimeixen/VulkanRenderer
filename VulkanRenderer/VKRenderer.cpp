@@ -106,11 +106,9 @@ void VKRenderer::WaitForFrameFences()
 	vkWaitForFences(base.GetDevice(), 1, &frameFences[currentFrame], VK_TRUE, UINT64_MAX);
 }
 
-void VKRenderer::Present()
+void VKRenderer::AcquireNextImage()
 {
 	VkDevice device = base.GetDevice();
-	VkQueue graphicsQueue = base.GetGraphicsQueue();
-	VkQueue presentQueue = base.GetPresentQueue();
 
 	VkResult res = vkAcquireNextImageKHR(device, base.GetSwapchain(), UINT64_MAX, imageAvailableSemaphores[currentFrame], VK_NULL_HANDLE, &imageIndex);
 
@@ -145,16 +143,26 @@ void VKRenderer::Present()
 	{
 		vkWaitForFences(device, 1, &imagesInFlight[imageIndex], VK_TRUE, UINT64_MAX);
 	}
+}
+
+void VKRenderer::Present(VkSemaphore computeSemaphore)
+{
+	VkDevice device = base.GetDevice();
+	VkQueue graphicsQueue = base.GetGraphicsQueue();
+	VkQueue presentQueue = base.GetPresentQueue();
 
 	// The image is now in use by this frame
 	imagesInFlight[imageIndex] = frameFences[currentFrame];
 
-	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+	//VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT };
+	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT };
+	//VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame], computeSemaphore };
+	VkSemaphore waitSemaphores[] = { computeSemaphore };
 
 	VkSubmitInfo submitInfo = {};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	submitInfo.waitSemaphoreCount = 1;
-	submitInfo.pWaitSemaphores = &imageAvailableSemaphores[currentFrame];
+	submitInfo.pWaitSemaphores = waitSemaphores;
 	submitInfo.pWaitDstStageMask = waitStages;
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &cmdBuffers[currentFrame];
@@ -178,7 +186,7 @@ void VKRenderer::Present()
 	presentInfo.pSwapchains = swapChains;
 	presentInfo.pImageIndices = &imageIndex;
 
-	res = vkQueuePresentKHR(presentQueue, &presentInfo);
+	VkResult res = vkQueuePresentKHR(presentQueue, &presentInfo);
 
 	if (res == VK_SUBOPTIMAL_KHR)
 	{

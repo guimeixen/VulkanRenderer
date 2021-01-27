@@ -3,7 +3,7 @@
 #include "VKUtils.h"
 #include "VKBuffer.h"
 
-#include <GLFW/glfw3.h>
+struct GLFWwindow;
 
 class VKBase
 {
@@ -25,11 +25,14 @@ public:
 	VkSurfaceKHR GetSurface() const { return surface; }
 	VkQueue GetPresentQueue() const { return graphicsQueue; }
 	VkQueue GetGraphicsQueue() const { return graphicsQueue; }
+	VkQueue GetComputeQueue() const { return computeQueue; }
+	VkQueue GetTransferQueue() const { return transferQueue; }
 	VkSwapchainKHR GetSwapchain() const { return swapchain; }
 	VkCommandPool GetCommandPool() const { return cmdPool; }
 
 	const VkPhysicalDeviceMemoryProperties &GetPhysicalDeviceMemoryProperties() const { return physicalDeviceMemoryProperties; }
 	const VkPhysicalDeviceLimits& GetPhysicalDeviceLimits() const { return physicalDeviceProperties.limits; }
+	const vkutils::QueueFamilyIndices& GetQueueFamilyIndices() const { return queueIndices; }
 
 	VkExtent2D GetSurfaceExtent() const { return surfaceExtent; }
 	VkSurfaceFormatKHR GetSurfaceFormat() const { return surfaceFormat; }
