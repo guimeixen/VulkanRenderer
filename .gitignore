@@ -6,7 +6,9 @@
 # User-specific files
 *.rsuser
 *.suo
-*.user
+# Commented to add the VulkanRenderer.vcxproj.user file, so we don't have to setup the Working Directory everytime and change form x64 to x86
+# Working Directory uses $(SolutionDir) so there's no problem with that
+#*.user
 *.userosscache
 *.sln.docstates
 
