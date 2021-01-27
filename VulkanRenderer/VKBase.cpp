@@ -465,7 +465,7 @@ bool VKBase::ChoosePhysicalDevice()
 
 bool VKBase::CreateDevice(VkSurfaceKHR surface)
 {
-	queueIndices = vkutils::FindQueueFamilies(physicalDevice, surface, false, true);
+	queueIndices = vkutils::FindQueueFamilies(physicalDevice, surface, false, false);
 
 	std::cout << "Graphics queue index: " << queueIndices.graphicsFamilyIndex << '\n';
 	std::cout << "Present queue index: " << queueIndices.presentFamilyIndex << '\n';

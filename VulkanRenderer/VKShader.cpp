@@ -8,6 +8,7 @@ VKShader::VKShader()
 {
     vertexModule = VK_NULL_HANDLE;
     fragmentModule = VK_NULL_HANDLE;
+    computeModule = VK_NULL_HANDLE;
     vertexStageInfo = {};
     fragmentStageInfo = {};
     computeStageInfo = {};
@@ -119,6 +120,16 @@ bool VKShader::LoadShader(VkDevice device, const std::string& computePath)
 
 void VKShader::Dispose(VkDevice device)
 {
-    vkDestroyShaderModule(device, vertexModule, nullptr);
-    vkDestroyShaderModule(device, fragmentModule, nullptr);
+    if (vertexModule != VK_NULL_HANDLE)
+    {
+        vkDestroyShaderModule(device, vertexModule, nullptr);
+    }
+    if (fragmentModule != VK_NULL_HANDLE)
+    {
+        vkDestroyShaderModule(device, fragmentModule, nullptr);
+    }
+    if (computeModule != VK_NULL_HANDLE)
+    {
+        vkDestroyShaderModule(device, computeModule, nullptr);
+    }
 }

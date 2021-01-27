@@ -860,16 +860,11 @@ int main()
 
 	VkFenceCreateInfo fenceInfo = {};
 	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-	fenceInfo.flags = 0;
+	fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
-	std::vector<VkFence> computeFences(2);
+	VkFence computeFence;
 
-	if (vkCreateFence(device, &fenceInfo, nullptr, &computeFences[0]) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create fence\n";
-		return 1;
-	}
-	if (vkCreateFence(device, &fenceInfo, nullptr, &computeFences[1]) != VK_SUCCESS)
+	if (vkCreateFence(device, &fenceInfo, nullptr, &computeFence) != VK_SUCCESS)
 	{
 		std::cout << "Failed to create fence\n";
 		return 1;
@@ -907,6 +902,8 @@ int main()
 	submitInfo.pCommandBuffers = &cmdBuffer;
 
 	VkFence fence;
+
+	fenceInfo.flags = 0;
 
 	if (vkCreateFence(device, &fenceInfo, nullptr, &fence) != VK_SUCCESS)
 	{
@@ -1142,7 +1139,10 @@ int main()
 		computeSubmitInfo.signalSemaphoreCount = 1;
 		computeSubmitInfo.pSignalSemaphores = &computeSemaphore;
 
-		if (vkQueueSubmit(base.GetComputeQueue(), 1, &computeSubmitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
+		vkWaitForFences(device, 1, &computeFence, VK_TRUE, UINT64_MAX);
+		vkResetFences(device, 1, &computeFence);
+
+		if (vkQueueSubmit(base.GetComputeQueue(), 1, &computeSubmitInfo, computeFence) != VK_SUCCESS)
 		{
 			std::cout << "Failed to submit\n";
 			return 1;
@@ -1163,6 +1163,14 @@ int main()
 	cameraUBO.Dispose(device);
 	offscreenFB.Dispose(device);
 	shadowFB.Dispose(device);
+
+	vkDestroyFence(device, computeFence, nullptr);
+	storageTexture.Dispose(device);
+	vkDestroyPipeline(device, computePipeline, nullptr);
+	vkDestroyPipelineLayout(device, computePipelineLayout, nullptr);
+	vkDestroyDescriptorSetLayout(device, computeSetLayout, nullptr);
+	computeShader.Dispose(device);
+	vkDestroySemaphore(device, computeSemaphore, nullptr);
 	
 	particleSystem.Dispose(device);
 
