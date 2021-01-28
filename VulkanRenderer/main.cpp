@@ -198,6 +198,14 @@ int main()
 	if (!particleSystem.Init(base, "Data/Textures/particleTexture.png", 10))
 		return false;
 
+	TextureParams storageTexParams = {};
+	storageTexParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+	storageTexParams.filter = VK_FILTER_LINEAR;
+	storageTexParams.format = VK_FORMAT_R8G8B8A8_UNORM;
+
+	VKTexture2D storageTexture;
+	storageTexture.CreateWithData(base, storageTexParams, 256, 256, nullptr);
+
 
 	struct CameraUBO
 	{
@@ -236,11 +244,17 @@ int main()
 	shadowMapLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	shadowMapLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-	VkDescriptorSetLayoutBinding texturesSetLayoutBindings[] = { shadowMapLayoutBinding };
+	VkDescriptorSetLayoutBinding storageImageLayoutBinding = {};
+	storageImageLayoutBinding.binding = 1;
+	storageImageLayoutBinding.descriptorCount = 1;
+	storageImageLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	storageImageLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkDescriptorSetLayoutBinding texturesSetLayoutBindings[] = { shadowMapLayoutBinding, storageImageLayoutBinding };
 
 	VkDescriptorSetLayoutCreateInfo texturesSetLayoutInfo = {};
 	texturesSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	texturesSetLayoutInfo.bindingCount = 1;
+	texturesSetLayoutInfo.bindingCount = 2;
 	texturesSetLayoutInfo.pBindings = texturesSetLayoutBindings;
 
 	VkDescriptorSetLayout texturesSetLayout;
@@ -377,6 +391,11 @@ int main()
 	imageInfo.imageView = shadowFB.GetDepthTexture().GetImageView();
 	imageInfo.sampler = shadowFB.GetDepthTexture().GetSampler();
 
+	VkDescriptorImageInfo imageInfo2 = {};
+	imageInfo2.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+	imageInfo2.imageView = storageTexture.GetImageView();
+	imageInfo2.sampler = storageTexture.GetSampler();
+
 	VkWriteDescriptorSet shadowMapWrite = {};
 	shadowMapWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
 	shadowMapWrite.dstSet = globalTexturesSet;
@@ -386,12 +405,22 @@ int main()
 	shadowMapWrite.descriptorCount = 1;
 	shadowMapWrite.pImageInfo = &imageInfo;
 
-	vkUpdateDescriptorSets(device, 1, &shadowMapWrite, 0, nullptr);
+	VkWriteDescriptorSet storageWrite = {};
+	storageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	storageWrite.dstSet = globalTexturesSet;
+	storageWrite.dstBinding = 1;
+	storageWrite.dstArrayElement = 0;
+	storageWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	storageWrite.descriptorCount = 1;
+	storageWrite.pImageInfo = &imageInfo2;
+
+	VkWriteDescriptorSet writes[] = { shadowMapWrite, storageWrite };
+
+	vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
 
 
 	// Model
 
-	VkDescriptorImageInfo imageInfo2 = {};
 	imageInfo2.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	imageInfo2.imageView = modelTexture.GetImageView();
 	imageInfo2.sampler = modelTexture.GetSampler();
@@ -667,7 +696,7 @@ int main()
 	setAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
 	setAllocInfo.descriptorPool = descriptorPool;
 	setAllocInfo.descriptorSetCount = 1;
-	setAllocInfo.pSetLayouts = &texturesSetLayout;
+	setAllocInfo.pSetLayouts = &userTexturesSetLayout;
 
 	VkDescriptorSet quadSet;
 
@@ -743,13 +772,6 @@ int main()
 		return 1;
 
 	// Compute
-
-	TextureParams storageTexParams = {};
-	// storageTexParams.addressMod
-	storageTexParams.format = VK_FORMAT_R8G8B8A8_UNORM;
-
-	VKTexture2D storageTexture;
-	storageTexture.CreateWithData(base, storageTexParams, 256, 256, nullptr);
 
 	VkDescriptorSetLayoutBinding computeSetLayoutBinding = {};
 	computeSetLayoutBinding.binding = 0;
@@ -879,6 +901,65 @@ int main()
 
 	vkEndCommandBuffer(computeCmdBuffer);
 
+
+	// Create quad to display the image create by the compute shader
+
+	glm::vec4 quadVertices[] = {
+		glm::vec4(-1.0f, -1.0f, 0.0f, 0.0f),
+		glm::vec4(-1.0f, 1.0f,	0.0f, 1.0f),
+		glm::vec4(1.0f, -1.0f,	1.0f, 0.0f),
+		
+		glm::vec4(1.0f, -1.0f,	1.0f, 0.0f),
+		glm::vec4(-1.0f, 1.0f,	0.0f, 1.0f),
+		glm::vec4(1.0f, 1.0f, 1.0f, 1.0f)
+	};
+
+	VKBuffer quadVertexStagingBuffer;
+	quadVertexStagingBuffer.Create(&base, sizeof(quadVertices), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	vertexSize = quadVertexStagingBuffer.GetSize();
+
+	mapped = quadVertexStagingBuffer.Map(device, 0, vertexSize);
+	memcpy(mapped, quadVertices, (size_t)vertexSize);
+	quadVertexStagingBuffer.Unmap(device);
+
+	VKBuffer quadVb;
+	quadVb.Create(&base, sizeof(quadVertices), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+	base.CopyBuffer(quadVertexStagingBuffer, quadVb, vertexSize);
+	quadVertexStagingBuffer.Dispose(device);
+
+	VkDescriptorSet quadStorageSet;
+
+	VkVertexInputBindingDescription quadBindingDesc = {};
+	quadBindingDesc.binding = 0;
+	quadBindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	quadBindingDesc.stride = sizeof(glm::vec4);
+
+	VkVertexInputAttributeDescription quadAttribDesc = {};
+	quadAttribDesc.binding = 0;
+	quadAttribDesc.format = VK_FORMAT_R32G32B32A32_SFLOAT;
+	quadAttribDesc.location = 0;
+	quadAttribDesc.offset = 0;
+
+	pipeInfo.depthStencilState.depthWriteEnable = VK_TRUE;
+
+	colorBlendAttachment = {};
+	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	colorBlendAttachment.blendEnable = VK_FALSE;
+
+	pipeInfo.vertexInput.vertexBindingDescriptionCount = 1;
+	pipeInfo.vertexInput.pVertexBindingDescriptions = &quadBindingDesc;
+	pipeInfo.vertexInput.vertexAttributeDescriptionCount = 1;
+	pipeInfo.vertexInput.pVertexAttributeDescriptions = &quadAttribDesc;
+
+	pipeInfo.colorBlending.attachmentCount = 1;
+	pipeInfo.colorBlending.pAttachments = &colorBlendAttachment;
+
+	VKShader quadStorageShader;
+	quadStorageShader.LoadShader(device, "Data/Shaders/quad_Vert.spv", "Data/Shaders/quad_frag.spv");
+
+	VKPipeline quadStoragePipeline;
+	if (!quadStoragePipeline.Create(device, pipeInfo, pipelineLayout, quadStorageShader, offscreenFB.GetRenderPass()))
+		return 1;
 
 
 
@@ -1080,6 +1161,11 @@ int main()
 		vkCmdBindIndexBuffer(cmdBuffer, floorModel.GetIndexBuffer().GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
 		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &floorSet, 0, nullptr);
 		vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(floorModel.GetIndexCount()), 1, 0, 0, 0);
+
+		vertexBuffers[0] = quadVb.GetBuffer();
+		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
+		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, quadStoragePipeline.GetPipeline());
+		vkCmdDraw(cmdBuffer, 6, 1, 0, 0);
 
 
 		// Render skybox as last

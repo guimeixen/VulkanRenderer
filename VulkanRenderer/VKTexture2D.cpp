@@ -509,6 +509,8 @@ bool VKTexture2D::CreateWithData(VKBase& base, const TextureParams& textureParam
 
 	if (!CreateImageView(device, VK_IMAGE_ASPECT_COLOR_BIT))
 		return false;
+	if (!CreateSampler(device))
+		return false;
 
 	return true;
 }
