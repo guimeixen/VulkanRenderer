@@ -856,29 +856,36 @@ int main()
 	}
 	
 	// Semaphore for compute and graphics sync
-	VkSemaphoreCreateInfo computeSemaphoreInfo = {};
-	computeSemaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+	VkSemaphoreCreateInfo semaphoreInfo = {};
+	semaphoreInfo.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
 
 	VkSemaphore computeSemaphore;
+	VkSemaphore graphicsSemaphore;
 
-	if (vkCreateSemaphore(device, &computeSemaphoreInfo, nullptr, &computeSemaphore) != VK_SUCCESS)
+	if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &computeSemaphore) != VK_SUCCESS)
 	{
 		std::cout << "Failed to create compute semaphore\n";
 		return 1;
 	}
+	if (vkCreateSemaphore(device, &semaphoreInfo, nullptr, &graphicsSemaphore) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create graphics semaphore\n";
+		return 1;
+	}
+
 
 	// Signal the semaphore
-	/*VkSubmitInfo semaInfo = {};
+	VkSubmitInfo semaInfo = {};
 	semaInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 	semaInfo.signalSemaphoreCount = 1;
-	semaInfo.pSignalSemaphores = &computeSemaphore;
+	semaInfo.pSignalSemaphores = &graphicsSemaphore;
 
 	if (vkQueueSubmit(base.GetComputeQueue(), 1, &semaInfo, VK_NULL_HANDLE) != VK_SUCCESS)
 	{
 		std::cout << "Failed to submit\n";
 		return 1;
 	}
-	vkQueueWaitIdle(base.GetComputeQueue());*/
+	vkQueueWaitIdle(base.GetComputeQueue());
 
 	VkFenceCreateInfo fenceInfo = {};
 	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -1210,15 +1217,12 @@ int main()
 		instancingBuffer.Unmap(device);
 
 		
-		renderer.AcquireNextImage();
-
-		VkSemaphore renderFinishedSemaphore = renderer.GetImageAvailableSemaphore();
-		VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+		VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 
 		VkSubmitInfo computeSubmitInfo = {};
 		computeSubmitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		computeSubmitInfo.waitSemaphoreCount = 1;
-		computeSubmitInfo.pWaitSemaphores = &renderFinishedSemaphore;
+		computeSubmitInfo.pWaitSemaphores = &graphicsSemaphore;
 		computeSubmitInfo.pWaitDstStageMask = &waitStage;
 		computeSubmitInfo.commandBufferCount = 1;
 		computeSubmitInfo.pCommandBuffers = &computeCmdBuffer;
@@ -1233,8 +1237,9 @@ int main()
 			std::cout << "Failed to submit\n";
 			return 1;
 		}
-
-		renderer.Present(computeSemaphore);
+		
+		renderer.AcquireNextImage();
+		renderer.Present(graphicsSemaphore, computeSemaphore);
 	}
 
 	vkDeviceWaitIdle(device);
@@ -1245,6 +1250,10 @@ int main()
 	vkDestroyDescriptorSetLayout(device, buffersSetLayout, nullptr);
 	vkDestroyDescriptorSetLayout(device, texturesSetLayout, nullptr);
 	vkDestroyDescriptorSetLayout(device, userTexturesSetLayout, nullptr);
+
+	quadStoragePipeline.Dispose(device);
+	quadStorageShader.Dispose(device);
+	quadVb.Dispose(device);
 
 	cameraUBO.Dispose(device);
 	offscreenFB.Dispose(device);
@@ -1257,6 +1266,7 @@ int main()
 	vkDestroyDescriptorSetLayout(device, computeSetLayout, nullptr);
 	computeShader.Dispose(device);
 	vkDestroySemaphore(device, computeSemaphore, nullptr);
+	vkDestroySemaphore(device, graphicsSemaphore, nullptr);
 	
 	particleSystem.Dispose(device);
 

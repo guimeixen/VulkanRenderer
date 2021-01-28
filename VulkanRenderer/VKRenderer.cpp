@@ -145,7 +145,7 @@ void VKRenderer::AcquireNextImage()
 	}
 }
 
-void VKRenderer::Present(VkSemaphore computeSemaphore)
+void VKRenderer::Present(VkSemaphore graphicsSemaphore, VkSemaphore computeSemaphore)
 {
 	VkDevice device = base.GetDevice();
 	VkQueue graphicsQueue = base.GetGraphicsQueue();
@@ -154,20 +154,22 @@ void VKRenderer::Present(VkSemaphore computeSemaphore)
 	// The image is now in use by this frame
 	imagesInFlight[imageIndex] = frameFences[currentFrame];
 
-	//VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT };
-	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT };
-	//VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame], computeSemaphore };
-	VkSemaphore waitSemaphores[] = { computeSemaphore };
+	VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT };
+	//VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT };
+	VkSemaphore waitSemaphores[] = { imageAvailableSemaphores[currentFrame], computeSemaphore };
+	//VkSemaphore waitSemaphores[] = { computeSemaphore };
+
+	VkSemaphore signalSemaphores[] = { graphicsSemaphore, renderFinishedSemaphores[currentFrame] };
 
 	VkSubmitInfo submitInfo = {};
 	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-	submitInfo.waitSemaphoreCount = 1;
+	submitInfo.waitSemaphoreCount = 2;
 	submitInfo.pWaitSemaphores = waitSemaphores;
 	submitInfo.pWaitDstStageMask = waitStages;
 	submitInfo.commandBufferCount = 1;
 	submitInfo.pCommandBuffers = &cmdBuffers[currentFrame];
-	submitInfo.signalSemaphoreCount = 1;
-	submitInfo.pSignalSemaphores = &renderFinishedSemaphores[currentFrame];
+	submitInfo.signalSemaphoreCount = 2;
+	submitInfo.pSignalSemaphores = signalSemaphores;
 
 	vkResetFences(device, 1, &frameFences[currentFrame]);
 

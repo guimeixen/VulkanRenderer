@@ -14,7 +14,7 @@ public:
 	void Dispose();
 	void WaitForFrameFences();
 	void AcquireNextImage();
-	void Present(VkSemaphore computeSemaphore);
+	void Present(VkSemaphore graphicsSemaphore, VkSemaphore computeSemaphore);
 
 	VkCommandBuffer CreateGraphicsCommandBuffer(bool beginRecord);
 	VkCommandBuffer CreateComputeCommandBuffer(bool beginRecord);
