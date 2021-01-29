@@ -153,7 +153,7 @@ namespace vkutils
 
 	QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device, VkSurfaceKHR surface, bool tryFindTransferOnlyQueue, bool tryFindComputeOnlyQueue)
 	{
-		QueueFamilyIndices indices;
+		QueueFamilyIndices indices = {};
 
 		uint32_t queueFamilyCount = 0;
 		vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
@@ -199,10 +199,14 @@ namespace vkutils
 			// Check if this queue family supports presentation
 			vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface, &presentSupport);
 
+			
 			if (queueFamilies[i].queueCount > 0 && presentSupport)
 			{
 				std::cout << "and PRESENT";
-				indices.presentFamilyIndex = i;
+
+				// Choose the first queue family that supports present, because on this GPU there are two families that support present, one with graphics and one without
+				if (indices.presentFamilyIndex == -1)
+					indices.presentFamilyIndex = i;
 			}
 
 			std::cout << std::endl;

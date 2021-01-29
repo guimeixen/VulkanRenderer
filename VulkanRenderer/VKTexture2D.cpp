@@ -1,5 +1,4 @@
 #include "VKTexture2D.h"
-#include "VKBuffer.h"
 
 #include "stb_image.h"
 
@@ -464,7 +463,7 @@ bool VKTexture2D::CreateWithData(VKBase& base, const TextureParams& textureParam
 	imageCreateInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 	imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
 
-	const vkutils::QueueFamilyIndices queueIndices = base.GetQueueFamilyIndices();
+	/*const vkutils::QueueFamilyIndices queueIndices = base.GetQueueFamilyIndices();
 
 	// If the graphics andcompute queues are different, we create an image that can be shared between them
 	// Performance can be worse than exclusive sharing mode, but we save some synchronization to keep this simple
@@ -477,9 +476,9 @@ bool VKTexture2D::CreateWithData(VKBase& base, const TextureParams& textureParam
 		imageCreateInfo.pQueueFamilyIndices = indices;
 	}
 	else
-	{
+	{*/
 		imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	}
+	//}
 
 	VkDevice device = base.GetDevice();
 

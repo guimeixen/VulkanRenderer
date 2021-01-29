@@ -25,6 +25,8 @@ public:
 	void BeginDefaultRenderPass();
 	void EndDefaultRenderPass();
 	void EndCmdRecording();
+	void AcquireImageBarrier(VkCommandBuffer cmdBuffer, const VKTexture2D& texture, int srcQueueFamilyIndex, int dstQueueFamilyIndex);
+	void ReleaseImageBarrier(VkCommandBuffer cmdBuffer, const VKTexture2D& texture, int srcQueueFamilyIndex, int dstQueueFamilyIndex);
 
 	VKBase& GetBase() { return base; }
 	VkRenderPass GetDefaultRenderPass() const { return renderPass; }

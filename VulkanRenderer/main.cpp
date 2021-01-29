@@ -880,12 +880,12 @@ int main()
 	semaInfo.signalSemaphoreCount = 1;
 	semaInfo.pSignalSemaphores = &graphicsSemaphore;
 
-	if (vkQueueSubmit(base.GetComputeQueue(), 1, &semaInfo, VK_NULL_HANDLE) != VK_SUCCESS)
+	if (vkQueueSubmit(base.GetGraphicsQueue(), 1, &semaInfo, VK_NULL_HANDLE) != VK_SUCCESS)
 	{
 		std::cout << "Failed to submit\n";
 		return 1;
 	}
-	vkQueueWaitIdle(base.GetComputeQueue());
+	vkQueueWaitIdle(base.GetGraphicsQueue());
 
 	VkFenceCreateInfo fenceInfo = {};
 	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
@@ -907,6 +907,70 @@ int main()
 	vkCmdDispatch(computeCmdBuffer, 256 / 16, 256 / 16, 1);
 
 	vkEndCommandBuffer(computeCmdBuffer);
+
+	// Transfer ownership
+	// If graphics and compute queue family indices differ, acquire and immediately release the storage image,
+	// so that the initial acquire from the graphics command buffers are matched up properly
+
+	/*const vkutils::QueueFamilyIndices& indices = base.GetQueueFamilyIndices();
+
+	if (indices.graphicsFamilyIndex != indices.computeFamilyIndex)
+	{
+		VkCommandBuffer transferOwnershipCmdBuffer = renderer.CreateComputeCommandBuffer(true);
+
+		VkImageSubresourceRange range = {};
+		range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+		range.baseArrayLayer = 0;
+		range.baseMipLevel = 0;
+		range.layerCount = 1;
+		range.levelCount = 1;
+
+		VkImageMemoryBarrier acquireBarrier = {};
+		acquireBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		acquireBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+		acquireBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		acquireBarrier.srcAccessMask = 0;
+		acquireBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		acquireBarrier.srcQueueFamilyIndex = indices.graphicsFamilyIndex;
+		acquireBarrier.dstQueueFamilyIndex = indices.computeFamilyIndex;
+		acquireBarrier.subresourceRange = range;
+		acquireBarrier.image = storageTexture.GetImage();
+
+		vkCmdPipelineBarrier(transferOwnershipCmdBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &acquireBarrier);
+
+		VkImageMemoryBarrier releaseBarrier = {};
+		releaseBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		releaseBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+		releaseBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		releaseBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		releaseBarrier.dstAccessMask = 0;
+		releaseBarrier.srcQueueFamilyIndex = indices.computeFamilyIndex;
+		releaseBarrier.dstQueueFamilyIndex = indices.graphicsFamilyIndex;
+		releaseBarrier.subresourceRange = range;
+		releaseBarrier.image = storageTexture.GetImage();
+
+		vkCmdPipelineBarrier(transferOwnershipCmdBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &releaseBarrier);
+
+		vkEndCommandBuffer(transferOwnershipCmdBuffer);
+
+		VkSubmitInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		info.commandBufferCount = 1;
+		info.pCommandBuffers = &transferOwnershipCmdBuffer;
+
+		if (vkQueueSubmit(base.GetComputeQueue(), 1, &info, VK_NULL_HANDLE) != VK_SUCCESS)
+		{
+			std::cout << "Failed to submit\n";
+			return 1;
+		}
+		vkQueueWaitIdle(base.GetComputeQueue());		// Or wait for fence?
+
+		renderer.FreeComputeCommandBuffer(transferOwnershipCmdBuffer);
+	}*/
+
+	
+
+
 
 
 	// Create quad to display the image create by the compute shader

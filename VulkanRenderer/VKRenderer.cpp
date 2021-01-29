@@ -14,7 +14,7 @@ VKRenderer::VKRenderer()
 
 bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int height)
 {
-	if (!base.Init(window, true, width, height))
+	if (!base.Init(window, width, height, true))
 		return false;
 
 	this->width = width;
@@ -178,14 +178,14 @@ void VKRenderer::Present(VkSemaphore graphicsSemaphore, VkSemaphore computeSemap
 		std::cout << "Failed to submit draw command buffer!\n";
 	}
 
-	VkSwapchainKHR swapChains[] = { base.GetSwapchain() };
+	VkSwapchainKHR swapChain[] = { base.GetSwapchain() };
 
 	VkPresentInfoKHR presentInfo = {};
 	presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 	presentInfo.waitSemaphoreCount = 1;
 	presentInfo.pWaitSemaphores = &renderFinishedSemaphores[currentFrame];
 	presentInfo.swapchainCount = 1;
-	presentInfo.pSwapchains = swapChains;
+	presentInfo.pSwapchains = swapChain;
 	presentInfo.pImageIndices = &imageIndex;
 
 	VkResult res = vkQueuePresentKHR(presentQueue, &presentInfo);
@@ -332,6 +332,47 @@ void VKRenderer::EndCmdRecording()
 		std::cout << "Failed to record command buffer!\n";
 	}
 }
+
+void VKRenderer::AcquireImageBarrier(VkCommandBuffer cmdBuffer, const VKTexture2D& texture, int srcQueueFamilyIndex, int dstQueueFamilyIndex)
+{
+	VkImageMemoryBarrier acquireBarrier = {};
+	acquireBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	acquireBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+	acquireBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+	acquireBarrier.srcAccessMask = 0;
+	acquireBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+	acquireBarrier.srcQueueFamilyIndex = srcQueueFamilyIndex;
+	acquireBarrier.dstQueueFamilyIndex = dstQueueFamilyIndex;
+	acquireBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	acquireBarrier.subresourceRange.baseArrayLayer = 0;
+	acquireBarrier.subresourceRange.baseMipLevel = 0;
+	acquireBarrier.subresourceRange.layerCount = 1;
+	acquireBarrier.subresourceRange.levelCount = 1;
+	acquireBarrier.image = texture.GetImage();
+
+	vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &acquireBarrier);
+}
+
+void VKRenderer::ReleaseImageBarrier(VkCommandBuffer cmdBuffer, const VKTexture2D& texture, int srcQueueFamilyIndex, int dstQueueFamilyIndex)
+{
+	VkImageMemoryBarrier releaseBarrier = {};
+	releaseBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	releaseBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+	releaseBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+	releaseBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+	releaseBarrier.dstAccessMask = 0;
+	releaseBarrier.srcQueueFamilyIndex = srcQueueFamilyIndex;
+	releaseBarrier.dstQueueFamilyIndex = dstQueueFamilyIndex;
+	releaseBarrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	releaseBarrier.subresourceRange.baseArrayLayer = 0;
+	releaseBarrier.subresourceRange.baseMipLevel = 0;
+	releaseBarrier.subresourceRange.layerCount = 1;
+	releaseBarrier.subresourceRange.levelCount = 1;
+	releaseBarrier.image = texture.GetImage();
+
+	vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &releaseBarrier);
+}
+
 
 bool VKRenderer::CreateRenderPass(const VKBase& base, VkRenderPass& renderPass, VkFormat depthFormat)
 {
