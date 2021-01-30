@@ -8,7 +8,7 @@ class Model
 {
 public:
 	Model();
-	bool Load(const std::string &path, VKBase& base);
+	bool Load(VKBase& base, const std::string &path);
 	void Dispose(VkDevice device);
 
 	unsigned int GetIndexCount() const { return indexCount; }

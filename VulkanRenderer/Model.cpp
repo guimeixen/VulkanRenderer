@@ -14,7 +14,7 @@ Model::Model()
 	indexCount = 0;
 }
 
-bool Model::Load(const std::string& path, VKBase &base)
+bool Model::Load(VKBase& base, const std::string& path)
 {
 	Assimp::Importer importer;
 	const aiScene* aiscene = importer.ReadFile(path, aiProcess_JoinIdenticalVertices | aiProcess_FlipUVs); //| aiProcess_GenSmoothNormals); //| aiProcess_CalcTangentSpace);

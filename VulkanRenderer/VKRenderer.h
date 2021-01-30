@@ -2,6 +2,7 @@
 
 #include "VKBase.h"
 #include "VKTexture2D.h"
+#include "VKFramebuffer.h"
 
 struct GLFWWindow;
 
@@ -23,6 +24,7 @@ public:
 
 	void BeginCmdRecording();
 	void BeginDefaultRenderPass();
+	void BeginRenderPass(VkCommandBuffer cmdBuffer, const VKFramebuffer& fb, uint32_t clearValueCount, const VkClearValue *clearValues);
 	void EndDefaultRenderPass();
 	void EndCmdRecording();
 	void AcquireImageBarrier(VkCommandBuffer cmdBuffer, const VKTexture2D& texture, int srcQueueFamilyIndex, int dstQueueFamilyIndex);

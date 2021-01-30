@@ -24,6 +24,9 @@ public:
 	const VKTexture2D& GetFirstColorTexture() const { return colorTextures[0]; }
 	const VKTexture2D& GetDepthTexture() const { return depthTexture; }
 
+	unsigned int GetWidth() const { return width; }
+	unsigned int GetHeight() const { return height; }
+
 private:
 	unsigned int width;
 	unsigned int height;

@@ -320,6 +320,20 @@ void VKRenderer::BeginDefaultRenderPass()
 	vkCmdBeginRenderPass(cmdBuffers[currentFrame], &renderBeginPassInfo, VK_SUBPASS_CONTENTS_INLINE);
 }
 
+void VKRenderer::BeginRenderPass(VkCommandBuffer cmdBuffer, const VKFramebuffer& fb, uint32_t clearValueCount, const VkClearValue* clearValues)
+{
+	VkRenderPassBeginInfo renderBeginPassInfo = {};
+	renderBeginPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+	renderBeginPassInfo.renderPass = fb.GetRenderPass();
+	renderBeginPassInfo.framebuffer = fb.GetFramebuffer();
+	renderBeginPassInfo.renderArea.offset = { 0, 0 };
+	renderBeginPassInfo.renderArea.extent = { fb.GetWidth(), fb.GetHeight() };
+	renderBeginPassInfo.clearValueCount = clearValueCount;
+	renderBeginPassInfo.pClearValues = clearValues;
+
+	vkCmdBeginRenderPass(cmdBuffer, &renderBeginPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+}
+
 void VKRenderer::EndDefaultRenderPass()
 {
 	vkCmdEndRenderPass(cmdBuffers[currentFrame]);
