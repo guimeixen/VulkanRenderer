@@ -851,12 +851,50 @@ int main()
 		return 1;
 	}
 
+
+	const vkutils::QueueFamilyIndices& indices = base.GetQueueFamilyIndices();
+
 	// Record the compute command buffer
 	VkCommandBuffer computeCmdBuffer = renderer.CreateComputeCommandBuffer(true);
 
+	// Acquire
+	VkImageSubresourceRange range = {};
+	range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	range.baseArrayLayer = 0;
+	range.baseMipLevel = 0;
+	range.layerCount = 1;
+	range.levelCount = 1;
+
+	VkImageMemoryBarrier acquireBarrier = {};
+	acquireBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	acquireBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+	acquireBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+	acquireBarrier.srcAccessMask = 0;
+	acquireBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+	acquireBarrier.srcQueueFamilyIndex = indices.graphicsFamilyIndex;
+	acquireBarrier.dstQueueFamilyIndex = indices.computeFamilyIndex;
+	acquireBarrier.subresourceRange = range;
+	acquireBarrier.image = storageTexture.GetImage();
+
+	vkCmdPipelineBarrier(computeCmdBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &acquireBarrier);
+	
 	vkCmdBindPipeline(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
 	vkCmdBindDescriptorSets(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeSet, 0, nullptr);
 	vkCmdDispatch(computeCmdBuffer, 256 / 16, 256 / 16, 1);
+
+	// Release
+	VkImageMemoryBarrier releaseBarrier = {};
+	releaseBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	releaseBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+	releaseBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+	releaseBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+	releaseBarrier.dstAccessMask = 0;
+	releaseBarrier.srcQueueFamilyIndex = indices.computeFamilyIndex;
+	releaseBarrier.dstQueueFamilyIndex = indices.graphicsFamilyIndex;
+	releaseBarrier.subresourceRange = range;
+	releaseBarrier.image = storageTexture.GetImage();
+
+	vkCmdPipelineBarrier(computeCmdBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &releaseBarrier);
 
 	vkEndCommandBuffer(computeCmdBuffer);
 
@@ -864,18 +902,49 @@ int main()
 	// If graphics and compute queue family indices differ, acquire and immediately release the storage image,
 	// so that the initial acquire from the graphics command buffers are matched up properly
 
-	const vkutils::QueueFamilyIndices& indices = base.GetQueueFamilyIndices();
-
 	if (indices.graphicsFamilyIndex != indices.computeFamilyIndex)
 	{
-		VkCommandBuffer transferOwnershipCmdBuffer = renderer.CreateComputeCommandBuffer(true);
 
+		// Release ownership from graphics queue to compute queue
 		VkImageSubresourceRange range = {};
 		range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 		range.baseArrayLayer = 0;
 		range.baseMipLevel = 0;
 		range.layerCount = 1;
 		range.levelCount = 1;
+
+		VkCommandBuffer cmd = renderer.CreateGraphicsCommandBuffer(true);
+
+		VkImageMemoryBarrier releaseBarrier = {};
+		releaseBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		releaseBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+		releaseBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		releaseBarrier.srcAccessMask = 0;
+		releaseBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		releaseBarrier.srcQueueFamilyIndex = indices.graphicsFamilyIndex;
+		releaseBarrier.dstQueueFamilyIndex = indices.computeFamilyIndex;
+		releaseBarrier.subresourceRange = range;
+		releaseBarrier.image = storageTexture.GetImage();
+
+		vkCmdPipelineBarrier(cmd, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &releaseBarrier);
+
+		vkEndCommandBuffer(cmd);
+
+		VkSubmitInfo info = {};
+		info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+		info.commandBufferCount = 1;
+		info.pCommandBuffers = &cmd;
+
+		if (vkQueueSubmit(base.GetGraphicsQueue(), 1, &info, VK_NULL_HANDLE) != VK_SUCCESS)
+		{
+			std::cout << "Failed to submit\n";
+			return 1;
+		}
+		vkQueueWaitIdle(base.GetGraphicsQueue());		// Or wait for fence?
+
+		renderer.FreeGraphicsCommandBuffer(cmd);
+
+		/*VkCommandBuffer transferOwnershipCmdBuffer = renderer.CreateComputeCommandBuffer(true);
 
 		VkImageMemoryBarrier acquireBarrier = {};
 		acquireBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -890,7 +959,7 @@ int main()
 
 		vkCmdPipelineBarrier(transferOwnershipCmdBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &acquireBarrier);
 
-		VkImageMemoryBarrier releaseBarrier = {};
+		//VkImageMemoryBarrier releaseBarrier = {};
 		releaseBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
 		releaseBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
 		releaseBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -902,10 +971,10 @@ int main()
 		releaseBarrier.image = storageTexture.GetImage();
 
 		vkCmdPipelineBarrier(transferOwnershipCmdBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &releaseBarrier);
-
+		
 		vkEndCommandBuffer(transferOwnershipCmdBuffer);
 
-		VkSubmitInfo info = {};
+		//VkSubmitInfo info = {};
 		info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 		info.commandBufferCount = 1;
 		info.pCommandBuffers = &transferOwnershipCmdBuffer;
@@ -917,7 +986,7 @@ int main()
 		}
 		vkQueueWaitIdle(base.GetComputeQueue());		// Or wait for fence?
 
-		renderer.FreeComputeCommandBuffer(transferOwnershipCmdBuffer);
+		renderer.FreeComputeCommandBuffer(transferOwnershipCmdBuffer);*/
 	}
 
 	
@@ -1141,7 +1210,26 @@ int main()
 		viewport.height = (float)surfaceExtent.height;
 
 		vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
+
+
+
+		// Acquire
+		VkImageMemoryBarrier acquireBarrier = {};
+		acquireBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		acquireBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+		acquireBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		acquireBarrier.srcAccessMask = 0;
+		acquireBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		acquireBarrier.srcQueueFamilyIndex = indices.computeFamilyIndex;
+		acquireBarrier.dstQueueFamilyIndex = indices.graphicsFamilyIndex;
+		acquireBarrier.subresourceRange = range;
+		acquireBarrier.image = storageTexture.GetImage();
+
+		vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &acquireBarrier);
 		
+		//renderer.AcquireImageBarrier(cmdBuffer, storageTexture, indices.computeFamilyIndex, indices.graphicsFamilyIndex);
+
+
 		VkClearValue clearValues[2] = {};
 		clearValues[0].color = { 0.3f, 0.3f, 0.3f, 1.0f };
 		clearValues[1].depthStencil = { 1.0f, 0 };
@@ -1160,7 +1248,7 @@ int main()
 		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, quadStoragePipeline.GetPipeline());
 		vkCmdDraw(cmdBuffer, 6, 1, 0, 0);
 
-
+		
 		// Render skybox as last
 		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipeline.GetPipeline());
 		vertexBuffers[0] = skyboxVB.GetBuffer();
@@ -1180,6 +1268,29 @@ int main()
 
 		vkCmdEndRenderPass(cmdBuffer);
 
+
+		// Release
+
+		VkImageMemoryBarrier releaseBarrier = {};
+		releaseBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		releaseBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+		releaseBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		releaseBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+		releaseBarrier.dstAccessMask = 0;
+		releaseBarrier.srcQueueFamilyIndex = indices.graphicsFamilyIndex;
+		releaseBarrier.dstQueueFamilyIndex = indices.computeFamilyIndex;
+		releaseBarrier.subresourceRange = range;
+		releaseBarrier.image = storageTexture.GetImage();
+
+		vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &releaseBarrier);
+
+		
+
+		//renderer.ReleaseImageBarrier(cmdBuffer, storageTexture, indices.graphicsFamilyIndex, indices.computeFamilyIndex);
+
+
+
+
 		// Normal pass
 		renderer.BeginDefaultRenderPass();
 
@@ -1189,6 +1300,9 @@ int main()
 
 		renderer.EndDefaultRenderPass();
 		renderer.EndCmdRecording();
+
+
+		// Update buffers
 
 		void* mapped = cameraUBO.Map(device, 0, VK_WHOLE_SIZE);
 		memcpy(mapped, camerasData, static_cast<size_t>(currentCamera + 1) * alignSingleUBOSize);
@@ -1202,6 +1316,8 @@ int main()
 		memcpy(mapped, psData.data(), psData.size() * sizeof(ParticleInstanceData));
 		instancingBuffer.Unmap(device);
 
+
+		// Compute
 		
 		VkPipelineStageFlags waitStage = VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT;
 

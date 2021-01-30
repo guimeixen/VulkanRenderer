@@ -36,7 +36,7 @@ bool VKBuffer::Create(VKBase *base, unsigned int size, VkBufferUsageFlags usage,
 	bufferCreateInfo.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
 	bufferCreateInfo.size = this->size;
 	bufferCreateInfo.usage = usage;
-	bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;		// The buffer will only be used from the graphics queue so we can use exlusive. How would we do if we had a separate compute queue
+	bufferCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 	VkDevice device = base->GetDevice();
 
