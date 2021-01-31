@@ -6,8 +6,6 @@
 
 #include "glm/glm.hpp"
 
-#include <string>
-
 struct Particle
 {
 	glm::vec3 pos;
@@ -27,8 +25,9 @@ class ParticleSystem
 public:
 	ParticleSystem();
 
-	bool Init(VKBase &base, const std::string texturePath, unsigned int maxParticles);
+	bool Init(VKBase &base, const std::string texturePath, unsigned int maxParticles, VkDescriptorPool descriptorPool, VkDescriptorSetLayout userTexturesSetLayout);
 	void Update(float dt);
+	void Render(VkCommandBuffer cmdBuffer, VkPipeline pipeline, VkPipelineLayout pipelineLayout);
 	const std::vector<ParticleInstanceData>& GetInstanceData();
 	void Dispose(VkDevice device);
 
@@ -46,6 +45,7 @@ private:
 	VKTexture2D texture;
 	VKBuffer vb;
 	VKBuffer instancingBuffer;
+	VkDescriptorSet set;
 	std::vector<Particle> particles;
 	std::vector<ParticleInstanceData> instanceData;
 	unsigned int maxParticles;

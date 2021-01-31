@@ -3,18 +3,15 @@
 #include "Random.h"
 #include "Camera.h"
 #include "VKRenderer.h"
-#include "Model.h"
 #include "VertexTypes.h"
 #include "VKFramebuffer.h"
-#include "VKPipeline.h"
-#include "ParticleSystem.h"
+#include "ParticleManager.h"
 #include "ModelManager.h"
 #include "Skybox.h"
 
 #include "glm/gtc/matrix_transform.hpp"
 
 #include <iostream>
-#include <string>
 #include <set>
 #include <array>
 #include <chrono>
@@ -116,9 +113,6 @@ int main()
 	VkDescriptorSetLayout buffersSetLayout;
 	VkDescriptorSetLayout texturesSetLayout;
 	VkDescriptorSetLayout userTexturesSetLayout;
-
-
-	VkDescriptorSet psSet;
 
 	VKBase& base = renderer.GetBase();
 
@@ -235,6 +229,7 @@ int main()
 	}
 	std::cout << "Create pipeline layout\n";
 
+	// Offscreen framebuffer
 	TextureParams colorParams = {};
 	colorParams.format = VK_FORMAT_R8G8B8A8_UNORM;
 	colorParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -252,23 +247,7 @@ int main()
 	VKFramebuffer offscreenFB;
 	offscreenFB.Create(base, fbParams, width, height);
 
-	ModelManager modelManager;
-	modelManager.Init(base, descriptorPool, userTexturesSetLayout);
-	modelManager.AddModel(base, "Data/Models/trash_can.obj", "Data/Models/trash_can_d.jpg");
-	modelManager.AddModel(base, "Data/Models/floor.obj", "Data/Models/floor.jpg");
-
-	std::vector<std::string> faces(6);
-	faces[0] = "Data/Textures/left.png";
-	faces[1] = "Data/Textures/right.png";
-	faces[2] = "Data/Textures/up.png";
-	faces[3] = "Data/Textures/down.png";
-	faces[4] = "Data/Textures/front.png";
-	faces[5] = "Data/Textures/back.png";
-
-	Skybox skybox;
-	skybox.Load(base, faces, descriptorPool, userTexturesSetLayout, pipelineLayout, offscreenFB.GetRenderPass());
-
-	
+	// Shadow mapping framebuffer
 	FramebufferParams shadowFBParams = {};
 	shadowFBParams.createColorTexture = false;
 	shadowFBParams.createDepthTexture = true;
@@ -284,9 +263,36 @@ int main()
 	shadowFB.Create(base, shadowFBParams, 1024, 1024);
 
 
-	ParticleSystem particleSystem;
-	if (!particleSystem.Init(base, "Data/Textures/particleTexture.png", 10))
-		return false;
+	ModelManager modelManager;
+	modelManager.Init(base, descriptorPool, userTexturesSetLayout);
+	modelManager.AddModel(base, "Data/Models/trash_can.obj", "Data/Models/trash_can_d.jpg");
+	modelManager.AddModel(base, "Data/Models/floor.obj", "Data/Models/floor.jpg");
+
+	std::vector<std::string> faces(6);
+	faces[0] = "Data/Textures/left.png";
+	faces[1] = "Data/Textures/right.png";
+	faces[2] = "Data/Textures/up.png";
+	faces[3] = "Data/Textures/down.png";
+	faces[4] = "Data/Textures/front.png";
+	faces[5] = "Data/Textures/back.png";
+
+	Skybox skybox;
+	if (!skybox.Load(base, faces, descriptorPool, userTexturesSetLayout, pipelineLayout, offscreenFB.GetRenderPass()))
+	{
+		std::cout << "Failed to load skybox\n";
+		return 1;
+	}
+	
+	ParticleManager particleManager;
+	if (!particleManager.Init(base, descriptorPool, userTexturesSetLayout, pipelineLayout, offscreenFB.GetRenderPass()))
+		return 1;
+
+	if (!particleManager.AddParticleSystem(base, "Data/Textures/particleTexture.png", 10))
+	{
+		std::cout << "Failed to add particle system\n";
+		return 1;
+	}
+
 
 	TextureParams storageTexParams = {};
 	storageTexParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
@@ -326,14 +332,6 @@ int main()
 	setAllocInfo.descriptorSetCount = 1;
 	setAllocInfo.pSetLayouts = &texturesSetLayout;
 	if (vkAllocateDescriptorSets(device, &setAllocInfo, &globalTexturesSet) != VK_SUCCESS)
-	{
-		std::cout << "failed to allocate descriptor sets\n";
-		return 1;
-	}
-
-	setAllocInfo.descriptorSetCount = 1;
-	setAllocInfo.pSetLayouts = &userTexturesSetLayout;
-	if (vkAllocateDescriptorSets(device, &setAllocInfo, &psSet) != VK_SUCCESS)
 	{
 		std::cout << "failed to allocate descriptor sets\n";
 		return 1;
@@ -392,23 +390,6 @@ int main()
 	VkWriteDescriptorSet writes[] = { shadowMapWrite, storageWrite };
 
 	vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
-
-	// Particle system
-	imageInfo2.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	imageInfo2.imageView = particleSystem.GetTexture().GetImageView();
-	imageInfo2.sampler = particleSystem.GetTexture().GetSampler();
-
-	VkWriteDescriptorSet descriptorWrites = {};
-	descriptorWrites.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	descriptorWrites.dstBinding = 0;
-	descriptorWrites.dstArrayElement = 0;
-	descriptorWrites.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	descriptorWrites.descriptorCount = 1;
-	descriptorWrites.dstSet = psSet;
-	descriptorWrites.pImageInfo = &imageInfo2;
-
-	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
-
 
 
 	VkVertexInputBindingDescription bindingDesc = {};
@@ -553,70 +534,21 @@ int main()
 		return 1;
 	}
 
-
+	
+	imageInfo2.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	imageInfo2.imageView = offscreenFB.GetFirstColorTexture().GetImageView();
 	imageInfo2.sampler = offscreenFB.GetFirstColorTexture().GetSampler();
 
+	VkWriteDescriptorSet descriptorWrites = {};
+	descriptorWrites.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrites.dstBinding = 0;
+	descriptorWrites.dstArrayElement = 0;
+	descriptorWrites.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	descriptorWrites.descriptorCount = 1;
 	descriptorWrites.dstSet = quadSet;
 	descriptorWrites.pImageInfo = &imageInfo2;
 
 	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
-
-	// Particle system pipeline
-
-	// Pipeline
-
-	VkVertexInputBindingDescription psBindingDesc[2] = {};
-	psBindingDesc[0].binding = 0;
-	psBindingDesc[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	psBindingDesc[0].stride = sizeof(glm::vec4);
-	psBindingDesc[1].binding = 1;
-	psBindingDesc[1].inputRate = VK_VERTEX_INPUT_RATE_INSTANCE;
-	psBindingDesc[1].stride = sizeof(ParticleInstanceData);
-
-	VkVertexInputAttributeDescription psAttribDesc[3] = {};
-	psAttribDesc[0].binding = 0;
-	psAttribDesc[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	psAttribDesc[0].location = 0;
-	psAttribDesc[0].offset = 0;
-
-	psAttribDesc[1].binding = 1;
-	psAttribDesc[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	psAttribDesc[1].location = 1;
-	psAttribDesc[1].offset = 0;
-
-	psAttribDesc[2].binding = 1;
-	psAttribDesc[2].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	psAttribDesc[2].location = 2;
-	psAttribDesc[2].offset = offsetof(ParticleInstanceData, color);
-
-	// Don't write depth
-	pipeInfo.depthStencilState.depthWriteEnable = VK_FALSE;
-
-	colorBlendAttachment = {};
-	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorBlendAttachment.blendEnable = VK_TRUE;
-	colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
-	colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-	colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-	colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-	colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-
-	pipeInfo.vertexInput.vertexBindingDescriptionCount = 2;
-	pipeInfo.vertexInput.pVertexBindingDescriptions = psBindingDesc;
-	pipeInfo.vertexInput.vertexAttributeDescriptionCount = 3;
-	pipeInfo.vertexInput.pVertexAttributeDescriptions = psAttribDesc;
-
-	pipeInfo.colorBlending.attachmentCount = 1;
-	pipeInfo.colorBlending.pAttachments = &colorBlendAttachment;
-
-	VKShader psShader;
-	psShader.LoadShader(device, "Data/Shaders/particle_vert.spv", "Data/Shaders/particle_frag.spv");
-
-	VKPipeline psPipeline;
-	if (!psPipeline.Create(device, pipeInfo, pipelineLayout, psShader, offscreenFB.GetRenderPass()))
-		return 1;
 
 	// Compute
 
@@ -965,7 +897,12 @@ int main()
 		CreateMipMaps(cmdBuffer, models[i].texture);
 	}
 
-	CreateMipMaps(cmdBuffer, particleSystem.GetTexture());
+	const std::vector<ParticleSystem>& particleSystems = particleManager.GetParticlesystems();
+
+	for (size_t i = 0; i < particleSystems.size(); i++)
+	{
+		CreateMipMaps(cmdBuffer, particleSystems[i].GetTexture());
+	}
 
 	if (vkEndCommandBuffer(cmdBuffer) != VK_SUCCESS)
 	{
@@ -1156,14 +1093,8 @@ int main()
 		// Render skybox as last
 		skybox.Render(cmdBuffer, pipelineLayout);
 
-		// Particle system
-		VkBuffer psVbs[] = { particleSystem.GetQuadVertexBuffer().GetBuffer(), particleSystem.GetInstancingBuffer().GetBuffer() };
-		VkDeviceSize psVbsOffsets[] = { 0,0 };
-
-		vkCmdBindVertexBuffers(cmdBuffer, 0, 2, psVbs, psVbsOffsets);
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &psSet, 0, nullptr);
-		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, psPipeline.GetPipeline());
-		vkCmdDraw(cmdBuffer, 6, particleSystem.GetNumAliveParticles(), 0, 0);
+		// Particle systems have to be rendered after the skybox
+		particleManager.Render(cmdBuffer);
 
 
 		vkCmdEndRenderPass(cmdBuffer);
@@ -1205,13 +1136,7 @@ int main()
 		memcpy(mapped, camerasData, static_cast<size_t>(currentCamera + 1) * alignSingleUBOSize);
 		cameraUBO.Unmap(device);
 
-		particleSystem.Update(deltaTime);
-		const std::vector<ParticleInstanceData> &psData = particleSystem.GetInstanceData();
-
-		VKBuffer& instancingBuffer = particleSystem.GetInstancingBuffer();
-		mapped = instancingBuffer.Map(device, 0, VK_WHOLE_SIZE);
-		memcpy(mapped, psData.data(), psData.size() * sizeof(ParticleInstanceData));
-		instancingBuffer.Unmap(device);
+		particleManager.Update(device, deltaTime);
 
 
 		// Compute
@@ -1267,20 +1192,18 @@ int main()
 	vkDestroySemaphore(device, computeSemaphore, nullptr);
 	vkDestroySemaphore(device, graphicsSemaphore, nullptr);
 	
-	particleSystem.Dispose(device);
 
 	modelManager.Dispose(device);
+	particleManager.Dispose(device);
 	skybox.Dispose(device);
 
 	modelShader.Dispose(device);
 	postQuadShader.Dispose(device);
 	shadowShader.Dispose(device);
-	psShader.Dispose(device);
 
 	modelPipeline.Dispose(device);
 	postQuadPipeline.Dispose(device);
 	shadowPipeline.Dispose(device);
-	psPipeline.Dispose(device);
 
 	vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);

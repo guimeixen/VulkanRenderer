@@ -13,7 +13,7 @@ ParticleSystem::ParticleSystem()
 	startLifeTime = 1.0f;
 }
 
-bool ParticleSystem::Init(VKBase& base, const std::string texturePath, unsigned int maxParticles)
+bool ParticleSystem::Init(VKBase& base, const std::string texturePath, unsigned int maxParticles, VkDescriptorPool descriptorPool, VkDescriptorSetLayout userTexturesSetLayout)
 {
 	this->maxParticles = maxParticles;
 
@@ -63,6 +63,34 @@ bool ParticleSystem::Init(VKBase& base, const std::string texturePath, unsigned 
 		RespawnParticle(particles[0]);		// Spawn one particle so they get update initially
 	}
 
+	VkDescriptorSetAllocateInfo setAllocInfo = {};
+	setAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+	setAllocInfo.descriptorPool = descriptorPool;
+	setAllocInfo.descriptorSetCount = 1;
+	setAllocInfo.pSetLayouts = &userTexturesSetLayout;
+
+	if (vkAllocateDescriptorSets(device, &setAllocInfo, &set) != VK_SUCCESS)
+	{
+		std::cout << "failed to allocate descriptor sets\n";
+		return false;
+	}
+
+	VkDescriptorImageInfo imageInfo = {};
+	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	imageInfo.imageView = texture.GetImageView();
+	imageInfo.sampler = texture.GetSampler();
+
+	VkWriteDescriptorSet descriptorWrite = {};
+	descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrite.dstBinding = 0;
+	descriptorWrite.dstArrayElement = 0;
+	descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	descriptorWrite.descriptorCount = 1;
+	descriptorWrite.dstSet = set;
+	descriptorWrite.pImageInfo = &imageInfo;
+
+	vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+
 	return true;
 }
 
@@ -96,6 +124,17 @@ void ParticleSystem::Update(float dt)
 		}
 		accumulator -= denom;
 	}
+}
+
+void ParticleSystem::Render(VkCommandBuffer cmdBuffer, VkPipeline pipeline, VkPipelineLayout pipelineLayout)
+{
+	VkBuffer vbs[] = { vb.GetBuffer(), instancingBuffer.GetBuffer() };
+	VkDeviceSize vbsOffsets[] = { 0,0 };
+
+	vkCmdBindVertexBuffers(cmdBuffer, 0, 2, vbs, vbsOffsets);
+	vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &set, 0, nullptr);
+	vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
+	vkCmdDraw(cmdBuffer, 6, GetNumAliveParticles(), 0, 0);
 }
 
 void ParticleSystem::RespawnParticle(Particle& p)
