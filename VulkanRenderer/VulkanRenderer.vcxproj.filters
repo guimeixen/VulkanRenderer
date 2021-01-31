@@ -87,6 +87,9 @@
     <ClCompile Include="Random.cpp">
       <Filter>Source Files\Program</Filter>
     </ClCompile>
+    <ClCompile Include="Skybox.cpp">
+      <Filter>Source Files\Graphics</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="VKBase.h">
@@ -139,6 +142,9 @@
     </ClInclude>
     <ClInclude Include="Random.h">
       <Filter>Header Files\Program</Filter>
+    </ClInclude>
+    <ClInclude Include="Skybox.h">
+      <Filter>Header Files\Graphics</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

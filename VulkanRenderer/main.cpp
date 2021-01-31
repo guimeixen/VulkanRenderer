@@ -9,6 +9,7 @@
 #include "VKPipeline.h"
 #include "ParticleSystem.h"
 #include "ModelManager.h"
+#include "Skybox.h"
 
 #include "glm/gtc/matrix_transform.hpp"
 
@@ -112,7 +113,11 @@ int main()
 	VkDescriptorSet globalBuffersSet;
 	VkDescriptorSet globalTexturesSet;
 
-	VkDescriptorSet skyboxSet;
+	VkDescriptorSetLayout buffersSetLayout;
+	VkDescriptorSetLayout texturesSetLayout;
+	VkDescriptorSetLayout userTexturesSetLayout;
+
+
 	VkDescriptorSet psSet;
 
 	VKBase& base = renderer.GetBase();
@@ -146,106 +151,6 @@ int main()
 	}
 	std::cout << "Created descriptor pool\n";
 
-	// User Textures
-
-	VkDescriptorSetLayoutBinding userTextureLayoutBinding = {};
-	userTextureLayoutBinding.binding = 0;
-	userTextureLayoutBinding.descriptorCount = 1;
-	userTextureLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	userTextureLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-	VkDescriptorSetLayoutBinding userTexturesSetLayoutBindings[] = { userTextureLayoutBinding };
-
-	VkDescriptorSetLayoutCreateInfo userTexturesSetLayoutInfo = {};
-	userTexturesSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	userTexturesSetLayoutInfo.bindingCount = 1;
-	userTexturesSetLayoutInfo.pBindings = userTexturesSetLayoutBindings;
-
-	VkDescriptorSetLayout userTexturesSetLayout;
-
-	if (vkCreateDescriptorSetLayout(device, &userTexturesSetLayoutInfo, nullptr, &userTexturesSetLayout) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create textures descriptor set layout\n";
-		return 1;
-	}
-
-	ModelManager modelManager;
-	modelManager.Init(base, descriptorPool, userTexturesSetLayout);
-	modelManager.AddModel(base, "Data/Models/trash_can.obj", "Data/Models/trash_can_d.jpg");
-	modelManager.AddModel(base, "Data/Models/floor.obj", "Data/Models/floor.jpg");
-
-	VKBuffer skyboxVB;
-
-	TextureParams colorParams = {};
-	colorParams.format = VK_FORMAT_R8G8B8A8_UNORM;
-	colorParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-	colorParams.filter = VK_FILTER_LINEAR;
-	TextureParams depthParams = {};
-	depthParams.format = vkutils::FindSupportedDepthFormat(base.GetPhysicalDevice());
-
-
-	FramebufferParams fbParams = {};
-	fbParams.createColorTexture = true;
-	fbParams.createDepthTexture = true;
-	fbParams.sampleDepth = false;
-	fbParams.colorTexturesParams.push_back(colorParams);
-	fbParams.depthTexturesParams = depthParams;
-
-	VKFramebuffer offscreenFB;
-	offscreenFB.Create(base, fbParams, width, height);
-
-	FramebufferParams shadowFBParams = {};
-	shadowFBParams.createColorTexture = false;
-	shadowFBParams.createDepthTexture = true;
-	shadowFBParams.sampleDepth = true;
-	shadowFBParams.depthTexturesParams.format = VK_FORMAT_D16_UNORM;
-	shadowFBParams.depthTexturesParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-
-	VkFilter filter = vkutils::IsFormatFilterable(base.GetPhysicalDevice(), VK_FORMAT_D16_UNORM, VK_IMAGE_TILING_OPTIMAL) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
-
-	shadowFBParams.depthTexturesParams.filter = filter;
-
-	VKFramebuffer shadowFB;
-	shadowFB.Create(base, shadowFBParams, 1024, 1024);
-
-	// Load cubemap
-	std::vector<std::string> faces(6);
-	faces[0] = "Data/Textures/left.png";
-	faces[1] = "Data/Textures/right.png";
-	faces[2] = "Data/Textures/up.png";
-	faces[3] = "Data/Textures/down.png";
-	faces[4] = "Data/Textures/front.png";
-	faces[5] = "Data/Textures/back.png";
-
-	TextureParams cubemapParams = {};
-	cubemapParams.format = VK_FORMAT_R8G8B8A8_SRGB;
-	cubemapParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
-	cubemapParams.filter = VK_FILTER_LINEAR;
-
-	VKTexture2D cubemap;
-	cubemap.LoadCubemapFromFiles(base, faces, cubemapParams);
-
-	ParticleSystem particleSystem;
-	if (!particleSystem.Init(base, "Data/Textures/particleTexture.png", 10))
-		return false;
-
-	TextureParams storageTexParams = {};
-	storageTexParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
-	storageTexParams.filter = VK_FILTER_LINEAR;
-	storageTexParams.format = VK_FORMAT_R8G8B8A8_UNORM;
-
-	VKTexture2D storageTexture;
-	storageTexture.CreateWithData(base, storageTexParams, 256, 256, nullptr);
-
-
-	struct CameraUBO
-	{
-		glm::mat4 proj;
-		glm::mat4 view;
-		glm::mat4 model;
-		glm::mat4 lightSpaceMatrix;
-	};
-
 	// Global Buffers
 
 	VkDescriptorSetLayoutBinding cameraLayoutBinding = {};
@@ -258,8 +163,6 @@ int main()
 	buffersSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
 	buffersSetLayoutInfo.bindingCount = 1;
 	buffersSetLayoutInfo.pBindings = &cameraLayoutBinding;
-
-	VkDescriptorSetLayout buffersSetLayout;
 
 	if (vkCreateDescriptorSetLayout(device, &buffersSetLayoutInfo, nullptr, &buffersSetLayout) != VK_SUCCESS)
 	{
@@ -288,13 +191,119 @@ int main()
 	texturesSetLayoutInfo.bindingCount = 2;
 	texturesSetLayoutInfo.pBindings = texturesSetLayoutBindings;
 
-	VkDescriptorSetLayout texturesSetLayout;
-
 	if (vkCreateDescriptorSetLayout(device, &texturesSetLayoutInfo, nullptr, &texturesSetLayout) != VK_SUCCESS)
 	{
 		std::cout << "Failed to create textures descriptor set layout\n";
 		return 1;
 	}
+
+	// User Textures
+
+	VkDescriptorSetLayoutBinding userTextureLayoutBinding = {};
+	userTextureLayoutBinding.binding = 0;
+	userTextureLayoutBinding.descriptorCount = 1;
+	userTextureLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	userTextureLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkDescriptorSetLayoutBinding userTexturesSetLayoutBindings[] = { userTextureLayoutBinding };
+
+	VkDescriptorSetLayoutCreateInfo userTexturesSetLayoutInfo = {};
+	userTexturesSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+	userTexturesSetLayoutInfo.bindingCount = 1;
+	userTexturesSetLayoutInfo.pBindings = userTexturesSetLayoutBindings;
+
+	if (vkCreateDescriptorSetLayout(device, &userTexturesSetLayoutInfo, nullptr, &userTexturesSetLayout) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create textures descriptor set layout\n";
+		return 1;
+	}
+
+	// Create pipeline layout
+	VkDescriptorSetLayout setLayouts[] = { buffersSetLayout, texturesSetLayout, userTexturesSetLayout };
+
+	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
+	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+	pipelineLayoutInfo.setLayoutCount = 3;
+	pipelineLayoutInfo.pSetLayouts = setLayouts;
+	pipelineLayoutInfo.pushConstantRangeCount = 0;
+	pipelineLayoutInfo.pPushConstantRanges = nullptr;
+
+	if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create pipeline layout\n";
+		return 1;
+	}
+	std::cout << "Create pipeline layout\n";
+
+	TextureParams colorParams = {};
+	colorParams.format = VK_FORMAT_R8G8B8A8_UNORM;
+	colorParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+	colorParams.filter = VK_FILTER_LINEAR;
+	TextureParams depthParams = {};
+	depthParams.format = vkutils::FindSupportedDepthFormat(base.GetPhysicalDevice());
+
+	FramebufferParams fbParams = {};
+	fbParams.createColorTexture = true;
+	fbParams.createDepthTexture = true;
+	fbParams.sampleDepth = false;
+	fbParams.colorTexturesParams.push_back(colorParams);
+	fbParams.depthTexturesParams = depthParams;
+
+	VKFramebuffer offscreenFB;
+	offscreenFB.Create(base, fbParams, width, height);
+
+	ModelManager modelManager;
+	modelManager.Init(base, descriptorPool, userTexturesSetLayout);
+	modelManager.AddModel(base, "Data/Models/trash_can.obj", "Data/Models/trash_can_d.jpg");
+	modelManager.AddModel(base, "Data/Models/floor.obj", "Data/Models/floor.jpg");
+
+	std::vector<std::string> faces(6);
+	faces[0] = "Data/Textures/left.png";
+	faces[1] = "Data/Textures/right.png";
+	faces[2] = "Data/Textures/up.png";
+	faces[3] = "Data/Textures/down.png";
+	faces[4] = "Data/Textures/front.png";
+	faces[5] = "Data/Textures/back.png";
+
+	Skybox skybox;
+	skybox.Load(base, faces, descriptorPool, userTexturesSetLayout, pipelineLayout, offscreenFB.GetRenderPass());
+
+	
+	FramebufferParams shadowFBParams = {};
+	shadowFBParams.createColorTexture = false;
+	shadowFBParams.createDepthTexture = true;
+	shadowFBParams.sampleDepth = true;
+	shadowFBParams.depthTexturesParams.format = VK_FORMAT_D16_UNORM;
+	shadowFBParams.depthTexturesParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+
+	VkFilter filter = vkutils::IsFormatFilterable(base.GetPhysicalDevice(), VK_FORMAT_D16_UNORM, VK_IMAGE_TILING_OPTIMAL) ? VK_FILTER_LINEAR : VK_FILTER_NEAREST;
+
+	shadowFBParams.depthTexturesParams.filter = filter;
+
+	VKFramebuffer shadowFB;
+	shadowFB.Create(base, shadowFBParams, 1024, 1024);
+
+
+	ParticleSystem particleSystem;
+	if (!particleSystem.Init(base, "Data/Textures/particleTexture.png", 10))
+		return false;
+
+	TextureParams storageTexParams = {};
+	storageTexParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
+	storageTexParams.filter = VK_FILTER_LINEAR;
+	storageTexParams.format = VK_FORMAT_R8G8B8A8_UNORM;
+
+	VKTexture2D storageTexture;
+	storageTexture.CreateWithData(base, storageTexParams, 256, 256, nullptr);
+
+
+	struct CameraUBO
+	{
+		glm::mat4 proj;
+		glm::mat4 view;
+		glm::mat4 model;
+		glm::mat4 lightSpaceMatrix;
+	};
 
 
 	// We use a buffer with twice (or triple) the size and then offset into it so we don't have to create multiple buffers
@@ -324,12 +333,6 @@ int main()
 
 	setAllocInfo.descriptorSetCount = 1;
 	setAllocInfo.pSetLayouts = &userTexturesSetLayout;
-	if (vkAllocateDescriptorSets(device, &setAllocInfo, &skyboxSet) != VK_SUCCESS)
-	{
-		std::cout << "failed to allocate descriptor sets\n";
-		return 1;
-	}
-
 	if (vkAllocateDescriptorSets(device, &setAllocInfo, &psSet) != VK_SUCCESS)
 	{
 		std::cout << "failed to allocate descriptor sets\n";
@@ -390,11 +393,10 @@ int main()
 
 	vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
 
-
-	// Skybox
+	// Particle system
 	imageInfo2.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	imageInfo2.imageView = cubemap.GetImageView();
-	imageInfo2.sampler = cubemap.GetSampler();
+	imageInfo2.imageView = particleSystem.GetTexture().GetImageView();
+	imageInfo2.sampler = particleSystem.GetTexture().GetSampler();
 
 	VkWriteDescriptorSet descriptorWrites = {};
 	descriptorWrites.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -402,37 +404,10 @@ int main()
 	descriptorWrites.dstArrayElement = 0;
 	descriptorWrites.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	descriptorWrites.descriptorCount = 1;
-	descriptorWrites.dstSet = skyboxSet;
-	descriptorWrites.pImageInfo = &imageInfo2;
-
-	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
-
-	// Particle system
-	imageInfo2.imageView = particleSystem.GetTexture().GetImageView();
-	imageInfo2.sampler = particleSystem.GetTexture().GetSampler();
-
 	descriptorWrites.dstSet = psSet;
 	descriptorWrites.pImageInfo = &imageInfo2;
 
 	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
-
-
-	// Create pipeline layout
-	VkDescriptorSetLayout setLayouts[] = { buffersSetLayout, texturesSetLayout, userTexturesSetLayout };
-
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
-	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 3;
-	pipelineLayoutInfo.pSetLayouts = setLayouts;
-	pipelineLayoutInfo.pushConstantRangeCount = 0;
-	pipelineLayoutInfo.pPushConstantRanges = nullptr;
-
-	if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create pipeline layout\n";
-		return 1;
-	}
-	std::cout << "Create pipeline layout\n";
 
 
 
@@ -499,90 +474,10 @@ int main()
 
 
 
-	float skyboxVertices[] = {
-		// positions          
-		-1.0f,  1.0f, -1.0f,
-		-1.0f, -1.0f, -1.0f,
-		 1.0f, -1.0f, -1.0f,
-		 1.0f, -1.0f, -1.0f,
-		 1.0f,  1.0f, -1.0f,
-		-1.0f,  1.0f, -1.0f,
-
-		-1.0f, -1.0f,  1.0f,
-		-1.0f, -1.0f, -1.0f,
-		-1.0f,  1.0f, -1.0f,
-		-1.0f,  1.0f, -1.0f,
-		-1.0f,  1.0f,  1.0f,
-		-1.0f, -1.0f,  1.0f,
-
-		 1.0f, -1.0f, -1.0f,
-		 1.0f, -1.0f,  1.0f,
-		 1.0f,  1.0f,  1.0f,
-		 1.0f,  1.0f,  1.0f,
-		 1.0f,  1.0f, -1.0f,
-		 1.0f, -1.0f, -1.0f,
-
-		-1.0f, -1.0f,  1.0f,
-		-1.0f,  1.0f,  1.0f,
-		 1.0f,  1.0f,  1.0f,
-		 1.0f,  1.0f,  1.0f,
-		 1.0f, -1.0f,  1.0f,
-		-1.0f, -1.0f,  1.0f,
-
-		-1.0f,  1.0f, -1.0f,
-		 1.0f,  1.0f, -1.0f,
-		 1.0f,  1.0f,  1.0f,
-		 1.0f,  1.0f,  1.0f,
-		-1.0f,  1.0f,  1.0f,
-		-1.0f,  1.0f, -1.0f,
-
-		-1.0f, -1.0f, -1.0f,
-		-1.0f, -1.0f,  1.0f,
-		 1.0f, -1.0f, -1.0f,
-		 1.0f, -1.0f, -1.0f,
-		-1.0f, -1.0f,  1.0f,
-		 1.0f, -1.0f,  1.0f
-	};
-
-	VKBuffer vertexStagingBuffer;
-	vertexStagingBuffer.Create(&base, sizeof(skyboxVertices), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	unsigned int vertexSize = vertexStagingBuffer.GetSize();
-
-	void* mapped = vertexStagingBuffer.Map(device, 0, vertexSize);
-	memcpy(mapped, skyboxVertices, (size_t)vertexSize);
-	vertexStagingBuffer.Unmap(device);
-
-	skyboxVB.Create(&base, sizeof(skyboxVertices), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-	base.CopyBuffer(vertexStagingBuffer, skyboxVB, vertexSize);
-
-	vertexStagingBuffer.Dispose(device);
+	
 
 
-	bindingDesc.binding = 0;
-	bindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	bindingDesc.stride = sizeof(glm::vec3);
-
-	attribDesc[0].binding = 0;
-	attribDesc[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-	attribDesc[0].location = 0;
-	attribDesc[0].offset = 0;
-
-	pipeInfo.vertexInput.vertexBindingDescriptionCount = 1;
-	pipeInfo.vertexInput.pVertexBindingDescriptions = &bindingDesc;
-	pipeInfo.vertexInput.vertexAttributeDescriptionCount = 1;
-	pipeInfo.vertexInput.pVertexAttributeDescriptions = attribDesc;
-
-	// Make sure to use LEQUAL in depth testing, because we set the skybox depth to 1 in the vertex shader
-	// and otherwise wouldn't render if we kept using just LESS
-	pipeInfo.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
-
-	VKShader skyboxShader;
-	skyboxShader.LoadShader(device, "Data/Shaders/skybox_vert.spv", "Data/Shaders/skybox_frag.spv");
-
-	VKPipeline skyboxPipeline;
-	if (!skyboxPipeline.Create(device, pipeInfo, pipelineLayout, skyboxShader, offscreenFB.GetRenderPass()))
-		return 1;
+	
 
 	// OFFSCREEN
 
@@ -857,7 +752,7 @@ int main()
 	// Record the compute command buffer
 	VkCommandBuffer computeCmdBuffer = renderer.CreateComputeCommandBuffer(true);
 
-	// Acquire
+
 	VkImageSubresourceRange range = {};
 	range.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	range.baseArrayLayer = 0;
@@ -865,36 +760,43 @@ int main()
 	range.layerCount = 1;
 	range.levelCount = 1;
 
-	VkImageMemoryBarrier acquireBarrier = {};
-	acquireBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	acquireBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-	acquireBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-	acquireBarrier.srcAccessMask = 0;
-	acquireBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-	acquireBarrier.srcQueueFamilyIndex = indices.graphicsFamilyIndex;
-	acquireBarrier.dstQueueFamilyIndex = indices.computeFamilyIndex;
-	acquireBarrier.subresourceRange = range;
-	acquireBarrier.image = storageTexture.GetImage();
+	if (indices.graphicsFamilyIndex != indices.computeFamilyIndex)
+	{
+		// Acquire
+		VkImageMemoryBarrier acquireBarrier = {};
+		acquireBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		acquireBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+		acquireBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		acquireBarrier.srcAccessMask = 0;
+		acquireBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		acquireBarrier.srcQueueFamilyIndex = indices.graphicsFamilyIndex;
+		acquireBarrier.dstQueueFamilyIndex = indices.computeFamilyIndex;
+		acquireBarrier.subresourceRange = range;
+		acquireBarrier.image = storageTexture.GetImage();
 
-	vkCmdPipelineBarrier(computeCmdBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &acquireBarrier);
-	
+		vkCmdPipelineBarrier(computeCmdBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &acquireBarrier);
+	}
+
 	vkCmdBindPipeline(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
 	vkCmdBindDescriptorSets(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeSet, 0, nullptr);
 	vkCmdDispatch(computeCmdBuffer, 256 / 16, 256 / 16, 1);
 
-	// Release
-	VkImageMemoryBarrier releaseBarrier = {};
-	releaseBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	releaseBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-	releaseBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-	releaseBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-	releaseBarrier.dstAccessMask = 0;
-	releaseBarrier.srcQueueFamilyIndex = indices.computeFamilyIndex;
-	releaseBarrier.dstQueueFamilyIndex = indices.graphicsFamilyIndex;
-	releaseBarrier.subresourceRange = range;
-	releaseBarrier.image = storageTexture.GetImage();
+	if (indices.graphicsFamilyIndex != indices.computeFamilyIndex)
+	{
+		// Release
+		VkImageMemoryBarrier releaseBarrier = {};
+		releaseBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+		releaseBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+		releaseBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+		releaseBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
+		releaseBarrier.dstAccessMask = 0;
+		releaseBarrier.srcQueueFamilyIndex = indices.computeFamilyIndex;
+		releaseBarrier.dstQueueFamilyIndex = indices.graphicsFamilyIndex;
+		releaseBarrier.subresourceRange = range;
+		releaseBarrier.image = storageTexture.GetImage();
 
-	vkCmdPipelineBarrier(computeCmdBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &releaseBarrier);
+		vkCmdPipelineBarrier(computeCmdBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &releaseBarrier);
+	}
 
 	vkEndCommandBuffer(computeCmdBuffer);
 
@@ -1005,9 +907,9 @@ int main()
 
 	VKBuffer quadVertexStagingBuffer;
 	quadVertexStagingBuffer.Create(&base, sizeof(quadVertices), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	vertexSize = quadVertexStagingBuffer.GetSize();
+	unsigned int vertexSize = quadVertexStagingBuffer.GetSize();
 
-	mapped = quadVertexStagingBuffer.Map(device, 0, vertexSize);
+	void* mapped = quadVertexStagingBuffer.Map(device, 0, vertexSize);
 	memcpy(mapped, quadVertices, (size_t)vertexSize);
 	quadVertexStagingBuffer.Unmap(device);
 
@@ -1212,22 +1114,25 @@ int main()
 		vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
 
 
+		if (indices.graphicsFamilyIndex != indices.computeFamilyIndex)
+		{
+			// Acquire
+			VkImageMemoryBarrier acquireBarrier = {};
+			acquireBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			acquireBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			acquireBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			acquireBarrier.srcAccessMask = 0;
+			acquireBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			acquireBarrier.srcQueueFamilyIndex = indices.computeFamilyIndex;
+			acquireBarrier.dstQueueFamilyIndex = indices.graphicsFamilyIndex;
+			acquireBarrier.subresourceRange = range;
+			acquireBarrier.image = storageTexture.GetImage();
 
-		// Acquire
-		VkImageMemoryBarrier acquireBarrier = {};
-		acquireBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		acquireBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-		acquireBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-		acquireBarrier.srcAccessMask = 0;
-		acquireBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		acquireBarrier.srcQueueFamilyIndex = indices.computeFamilyIndex;
-		acquireBarrier.dstQueueFamilyIndex = indices.graphicsFamilyIndex;
-		acquireBarrier.subresourceRange = range;
-		acquireBarrier.image = storageTexture.GetImage();
+			vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &acquireBarrier);
 
-		vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &acquireBarrier);
+			//renderer.AcquireImageBarrier(cmdBuffer, storageTexture, indices.computeFamilyIndex, indices.graphicsFamilyIndex);
+		}
 		
-		//renderer.AcquireImageBarrier(cmdBuffer, storageTexture, indices.computeFamilyIndex, indices.graphicsFamilyIndex);
 
 
 		VkClearValue clearValues[2] = {};
@@ -1236,12 +1141,11 @@ int main()
 
 		renderer.BeginRenderPass(cmdBuffer, offscreenFB, 2, clearValues);
 
+		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelPipeline.GetPipeline());		
+		modelManager.Render(cmdBuffer, pipelineLayout);
+
 		VkBuffer vertexBuffers[] = { VK_NULL_HANDLE };
 		VkDeviceSize offsets[] = { 0 };
-
-		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelPipeline.GetPipeline());
-		
-		modelManager.Render(cmdBuffer, pipelineLayout);
 
 		vertexBuffers[0] = quadVb.GetBuffer();
 		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
@@ -1250,11 +1154,7 @@ int main()
 
 		
 		// Render skybox as last
-		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, skyboxPipeline.GetPipeline());
-		vertexBuffers[0] = skyboxVB.GetBuffer();
-		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &skyboxSet, 0, nullptr);
-		vkCmdDraw(cmdBuffer, 36, 1, 0, 0);
+		skybox.Render(cmdBuffer, pipelineLayout);
 
 		// Particle system
 		VkBuffer psVbs[] = { particleSystem.GetQuadVertexBuffer().GetBuffer(), particleSystem.GetInstancingBuffer().GetBuffer() };
@@ -1268,27 +1168,24 @@ int main()
 
 		vkCmdEndRenderPass(cmdBuffer);
 
+		if (indices.graphicsFamilyIndex != indices.computeFamilyIndex)
+		{
+			// Release
+			VkImageMemoryBarrier releaseBarrier = {};
+			releaseBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+			releaseBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+			releaseBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+			releaseBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+			releaseBarrier.dstAccessMask = 0;
+			releaseBarrier.srcQueueFamilyIndex = indices.graphicsFamilyIndex;
+			releaseBarrier.dstQueueFamilyIndex = indices.computeFamilyIndex;
+			releaseBarrier.subresourceRange = range;
+			releaseBarrier.image = storageTexture.GetImage();
 
-		// Release
+			vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &releaseBarrier);
 
-		VkImageMemoryBarrier releaseBarrier = {};
-		releaseBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		releaseBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-		releaseBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-		releaseBarrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		releaseBarrier.dstAccessMask = 0;
-		releaseBarrier.srcQueueFamilyIndex = indices.graphicsFamilyIndex;
-		releaseBarrier.dstQueueFamilyIndex = indices.computeFamilyIndex;
-		releaseBarrier.subresourceRange = range;
-		releaseBarrier.image = storageTexture.GetImage();
-
-		vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &releaseBarrier);
-
-		
-
-		//renderer.ReleaseImageBarrier(cmdBuffer, storageTexture, indices.graphicsFamilyIndex, indices.computeFamilyIndex);
-
-
+			//renderer.ReleaseImageBarrier(cmdBuffer, storageTexture, indices.graphicsFamilyIndex, indices.computeFamilyIndex);
+		}
 
 
 		// Normal pass
@@ -1373,18 +1270,14 @@ int main()
 	particleSystem.Dispose(device);
 
 	modelManager.Dispose(device);
-
-	cubemap.Dispose(device);
-	skyboxVB.Dispose(device);
+	skybox.Dispose(device);
 
 	modelShader.Dispose(device);
-	skyboxShader.Dispose(device);
 	postQuadShader.Dispose(device);
 	shadowShader.Dispose(device);
 	psShader.Dispose(device);
 
 	modelPipeline.Dispose(device);
-	skyboxPipeline.Dispose(device);
 	postQuadPipeline.Dispose(device);
 	shadowPipeline.Dispose(device);
 	psPipeline.Dispose(device);
