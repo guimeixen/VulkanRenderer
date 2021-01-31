@@ -1,7 +1,9 @@
 #pragma once
 
 #include "Model.h"
-#include "VKTexture2D.h"
+#include "VKShader.h"
+#include "VKPipeline.h"
+#include "VKRenderer.h"
 
 struct RenderModel
 {
@@ -15,16 +17,17 @@ class ModelManager
 public:
 	ModelManager();
 
-	void Init(VKBase& base, VkDescriptorPool descriptorPool, VkDescriptorSetLayout userTexturesSetLayout);
-	bool AddModel(VKBase &base, const std::string &path, const std::string &texturePath);
-	void Render(VkCommandBuffer cmdBuffer, VkPipelineLayout pipelineLayout);
+	bool Init(VKRenderer &renderer, VkRenderPass renderPass);
+	bool AddModel(VKRenderer& renderer, const std::string &path, const std::string &texturePath);
+	void Render(VkCommandBuffer cmdBuffer, VkPipelineLayout pipelineLayout, VkPipeline shadowMapPipeline);
 	void Dispose(VkDevice device);
 
 	const std::vector<RenderModel>& GetRenderModels() const { return models; }
 
 private:
 	std::vector<RenderModel> models;
-	VkDescriptorPool descriptorPool;
-	VkDescriptorSetLayout userTexturesSetLayout;
+
+	VKShader shader;
+	VKPipeline pipeline;
 };
 

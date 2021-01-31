@@ -1,7 +1,7 @@
 #pragma once
 
 #include "VKBase.h"
-#include "VKTexture2D.h"
+#include "VKRenderer.h"
 #include "VKPipeline.h"
 
 #include "glm/glm.hpp"
@@ -25,7 +25,7 @@ class ParticleSystem
 public:
 	ParticleSystem();
 
-	bool Init(VKBase &base, const std::string texturePath, unsigned int maxParticles, VkDescriptorPool descriptorPool, VkDescriptorSetLayout userTexturesSetLayout);
+	bool Init(VKRenderer &renderer, const std::string texturePath, unsigned int maxParticles);
 	void Update(float dt);
 	void Render(VkCommandBuffer cmdBuffer, VkPipeline pipeline, VkPipelineLayout pipelineLayout);
 	const std::vector<ParticleInstanceData>& GetInstanceData();

@@ -9,8 +9,10 @@ Skybox::Skybox()
 	set = VK_NULL_HANDLE;
 }
 
-bool Skybox::Load(VKBase& base, const std::vector<std::string>& facesPath, VkDescriptorPool descriptorPool, VkDescriptorSetLayout userTexturesSetLayout, VkPipelineLayout pipelineLayout, VkRenderPass renderPass)
+bool Skybox::Load(VKRenderer& renderer, const std::vector<std::string>& facesPath, VkRenderPass renderPass)
 {
+	VKBase& base = renderer.GetBase();
+
 	TextureParams cubemapParams = {};
 	cubemapParams.format = VK_FORMAT_R8G8B8A8_SRGB;
 	cubemapParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
@@ -20,17 +22,7 @@ bool Skybox::Load(VKBase& base, const std::vector<std::string>& facesPath, VkDes
 
 	VkDevice device = base.GetDevice();
 
-	VkDescriptorSetAllocateInfo setAllocInfo = {};
-	setAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	setAllocInfo.descriptorPool = descriptorPool;
-	setAllocInfo.descriptorSetCount = 1;
-	setAllocInfo.pSetLayouts = &userTexturesSetLayout;
-
-	if (vkAllocateDescriptorSets(device, &setAllocInfo, &set) != VK_SUCCESS)
-	{
-		std::cout << "failed to allocate descriptor sets\n";
-		return false;
-	}
+	set = renderer.AllocateUserTextureDescriptorSet();
 
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -160,7 +152,7 @@ bool Skybox::Load(VKBase& base, const std::vector<std::string>& facesPath, VkDes
 
 	shader.LoadShader(device, "Data/Shaders/skybox_vert.spv", "Data/Shaders/skybox_frag.spv");
 
-	if (!pipeline.Create(device, pipeInfo, pipelineLayout, shader, renderPass))
+	if (!pipeline.Create(device, pipeInfo, renderer.GetPipelineLayout(), shader, renderPass))
 		return false;
 
 	return true;

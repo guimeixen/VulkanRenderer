@@ -1,6 +1,6 @@
 #pragma once
 
-#include "VKTexture2D.h"
+#include "VKRenderer.h"
 #include "VKShader.h"
 #include "VKPipeline.h"
 
@@ -9,7 +9,7 @@ class Skybox
 public:
 	Skybox();
 
-	bool Load(VKBase &base, const std::vector<std::string>& facesPath, VkDescriptorPool descriptorPool, VkDescriptorSetLayout userTexturesSetLayout, VkPipelineLayout pipelineLayout, VkRenderPass renderPass);
+	bool Load(VKRenderer &renderer, const std::vector<std::string>& facesPath, VkRenderPass renderPass);
 	void Render(VkCommandBuffer cmdBuffer, VkPipelineLayout pipelineLayout);
 	void Dispose(VkDevice device);
 

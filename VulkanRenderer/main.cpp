@@ -8,6 +8,7 @@
 #include "ParticleManager.h"
 #include "ModelManager.h"
 #include "Skybox.h"
+#include "UniformBufferTypes.h"
 
 #include "glm/gtc/matrix_transform.hpp"
 
@@ -18,77 +19,6 @@
 
 unsigned int width = 640;
 unsigned int height = 480;
-
-void CreateMipMaps(VkCommandBuffer cmdBuffer, const VKTexture2D& texture)
-{
-	for (unsigned int i = 1; i < texture.GetNumMipLevels(); i++)
-	{
-		VkImageBlit blit = {};
-
-		// Source
-		blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		blit.srcSubresource.layerCount = 1;
-		blit.srcSubresource.mipLevel = static_cast<uint32_t>(i - 1);
-		blit.srcOffsets[1].x = static_cast<int32_t>(texture.GetWidth() >> (i - 1));
-		blit.srcOffsets[1].y = static_cast<int32_t>(texture.GetHeight() >> (i - 1));
-		blit.srcOffsets[1].z = 1;
-
-		// Destination
-		blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		blit.dstSubresource.layerCount = 1;
-		blit.dstSubresource.mipLevel = static_cast<uint32_t>(i);
-		blit.dstOffsets[1].x = static_cast<int32_t>(texture.GetWidth() >> i);
-		blit.dstOffsets[1].y = static_cast<int32_t>(texture.GetHeight() >> i);
-		blit.dstOffsets[1].z = 1;
-
-		// To account for non square texture (eg 512x1024), when one of the sides reaches zero  4x8,2x4,1x2,0x1!! so we need to correct to 1x1
-		if (blit.dstOffsets[1].x == 0)
-			blit.dstOffsets[1].x = 1;
-		if (blit.dstOffsets[1].y == 0)
-			blit.dstOffsets[1].y = 1;
-
-		// Preprare this mip. Transition this mip level to TRANSFER_DST
-		VkImageMemoryBarrier barrier = {};
-		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-		barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-		barrier.image = texture.GetImage();
-		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		barrier.subresourceRange.baseArrayLayer = 0;
-		barrier.subresourceRange.baseMipLevel = i;
-		barrier.subresourceRange.layerCount = 1;
-		barrier.subresourceRange.levelCount = 1;
-		barrier.srcAccessMask = 0;
-		barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-
-		vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-		vkCmdBlitImage(cmdBuffer, texture.GetImage(), VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, texture.GetImage(), VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &blit, VK_FILTER_LINEAR);
-
-		barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-		barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-
-		// Prepare the current mip as the source for the next mip
-		vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-	}
-
-	// All mips are in TRANSFER_SRC, so transition them all to SHADER_READ
-	VkImageMemoryBarrier barrier = {};
-	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-	barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
-	barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	barrier.image = texture.GetImage();
-	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-	barrier.subresourceRange.baseArrayLayer = 0;
-	barrier.subresourceRange.baseMipLevel = 0;
-	barrier.subresourceRange.layerCount = 1;
-	barrier.subresourceRange.levelCount = texture.GetNumMipLevels();
-	barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
-	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-
-	vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
-}
 
 int main()
 {
@@ -106,128 +36,11 @@ int main()
 		return 1;
 	}
 
-	VkPipelineLayout pipelineLayout;
-	VkDescriptorSet globalBuffersSet;
-	VkDescriptorSet globalTexturesSet;
-
-	VkDescriptorSetLayout buffersSetLayout;
-	VkDescriptorSetLayout texturesSetLayout;
-	VkDescriptorSetLayout userTexturesSetLayout;
-
 	VKBase& base = renderer.GetBase();
 
 	VkDevice device = base.GetDevice();
 	VkExtent2D surfaceExtent = base.GetSurfaceExtent();
 	VkSurfaceFormatKHR surfaceFormat = base.GetSurfaceFormat();
-
-	VkDescriptorPoolSize poolSizes[3] = {};
-	poolSizes[0].descriptorCount = 1;
-	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-
-	poolSizes[1].descriptorCount = 10;
-	poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-
-	poolSizes[2].descriptorCount = 1;
-	poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-
-	VkDescriptorPoolCreateInfo descPoolInfo = {};
-	descPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	descPoolInfo.maxSets = 8;
-	descPoolInfo.poolSizeCount = 3;
-	descPoolInfo.pPoolSizes = poolSizes;
-
-	VkDescriptorPool descriptorPool;
-
-	if (vkCreateDescriptorPool(device, &descPoolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create descriptor pool\n";
-		return 1;
-	}
-	std::cout << "Created descriptor pool\n";
-
-	// Global Buffers
-
-	VkDescriptorSetLayoutBinding cameraLayoutBinding = {};
-	cameraLayoutBinding.binding = 0;
-	cameraLayoutBinding.descriptorCount = 1;
-	cameraLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-	cameraLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-
-	VkDescriptorSetLayoutCreateInfo buffersSetLayoutInfo = {};
-	buffersSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	buffersSetLayoutInfo.bindingCount = 1;
-	buffersSetLayoutInfo.pBindings = &cameraLayoutBinding;
-
-	if (vkCreateDescriptorSetLayout(device, &buffersSetLayoutInfo, nullptr, &buffersSetLayout) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create buffers descriptor set layout\n";
-		return 1;
-	}
-
-	// Global Textures
-
-	VkDescriptorSetLayoutBinding shadowMapLayoutBinding = {};
-	shadowMapLayoutBinding.binding = 0;
-	shadowMapLayoutBinding.descriptorCount = 1;
-	shadowMapLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	shadowMapLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-	VkDescriptorSetLayoutBinding storageImageLayoutBinding = {};
-	storageImageLayoutBinding.binding = 1;
-	storageImageLayoutBinding.descriptorCount = 1;
-	storageImageLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	storageImageLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-	VkDescriptorSetLayoutBinding texturesSetLayoutBindings[] = { shadowMapLayoutBinding, storageImageLayoutBinding };
-
-	VkDescriptorSetLayoutCreateInfo texturesSetLayoutInfo = {};
-	texturesSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	texturesSetLayoutInfo.bindingCount = 2;
-	texturesSetLayoutInfo.pBindings = texturesSetLayoutBindings;
-
-	if (vkCreateDescriptorSetLayout(device, &texturesSetLayoutInfo, nullptr, &texturesSetLayout) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create textures descriptor set layout\n";
-		return 1;
-	}
-
-	// User Textures
-
-	VkDescriptorSetLayoutBinding userTextureLayoutBinding = {};
-	userTextureLayoutBinding.binding = 0;
-	userTextureLayoutBinding.descriptorCount = 1;
-	userTextureLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	userTextureLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-
-	VkDescriptorSetLayoutBinding userTexturesSetLayoutBindings[] = { userTextureLayoutBinding };
-
-	VkDescriptorSetLayoutCreateInfo userTexturesSetLayoutInfo = {};
-	userTexturesSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	userTexturesSetLayoutInfo.bindingCount = 1;
-	userTexturesSetLayoutInfo.pBindings = userTexturesSetLayoutBindings;
-
-	if (vkCreateDescriptorSetLayout(device, &userTexturesSetLayoutInfo, nullptr, &userTexturesSetLayout) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create textures descriptor set layout\n";
-		return 1;
-	}
-
-	// Create pipeline layout
-	VkDescriptorSetLayout setLayouts[] = { buffersSetLayout, texturesSetLayout, userTexturesSetLayout };
-
-	VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
-	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	pipelineLayoutInfo.setLayoutCount = 3;
-	pipelineLayoutInfo.pSetLayouts = setLayouts;
-	pipelineLayoutInfo.pushConstantRangeCount = 0;
-	pipelineLayoutInfo.pPushConstantRanges = nullptr;
-
-	if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create pipeline layout\n";
-		return 1;
-	}
-	std::cout << "Create pipeline layout\n";
 
 	// Offscreen framebuffer
 	TextureParams colorParams = {};
@@ -264,9 +77,15 @@ int main()
 
 
 	ModelManager modelManager;
-	modelManager.Init(base, descriptorPool, userTexturesSetLayout);
-	modelManager.AddModel(base, "Data/Models/trash_can.obj", "Data/Models/trash_can_d.jpg");
-	modelManager.AddModel(base, "Data/Models/floor.obj", "Data/Models/floor.jpg");
+	if (!modelManager.Init(renderer, offscreenFB.GetRenderPass()))
+	{
+		std::cout << "Failed to init model manager\n";
+		return 1;
+	}
+
+	
+	modelManager.AddModel(renderer, "Data/Models/trash_can.obj", "Data/Models/trash_can_d.jpg");
+	modelManager.AddModel(renderer, "Data/Models/floor.obj", "Data/Models/floor.jpg");
 
 	std::vector<std::string> faces(6);
 	faces[0] = "Data/Textures/left.png";
@@ -277,17 +96,17 @@ int main()
 	faces[5] = "Data/Textures/back.png";
 
 	Skybox skybox;
-	if (!skybox.Load(base, faces, descriptorPool, userTexturesSetLayout, pipelineLayout, offscreenFB.GetRenderPass()))
+	if (!skybox.Load(renderer, faces, offscreenFB.GetRenderPass()))
 	{
 		std::cout << "Failed to load skybox\n";
 		return 1;
 	}
 	
 	ParticleManager particleManager;
-	if (!particleManager.Init(base, descriptorPool, userTexturesSetLayout, pipelineLayout, offscreenFB.GetRenderPass()))
+	if (!particleManager.Init(renderer, offscreenFB.GetRenderPass()))
 		return 1;
 
-	if (!particleManager.AddParticleSystem(base, "Data/Textures/particleTexture.png", 10))
+	if (!particleManager.AddParticleSystem(renderer, "Data/Textures/particleTexture.png", 10))
 	{
 		std::cout << "Failed to add particle system\n";
 		return 1;
@@ -303,61 +122,18 @@ int main()
 	storageTexture.CreateWithData(base, storageTexParams, 256, 256, nullptr);
 
 
-	struct CameraUBO
-	{
-		glm::mat4 proj;
-		glm::mat4 view;
-		glm::mat4 model;
-		glm::mat4 lightSpaceMatrix;
-	};
-
-
+	
 	// We use a buffer with twice (or triple) the size and then offset into it so we don't have to create multiple buffers
 	// Buffer create function takes care of aligment if the buffer is a ubo
 	VKBuffer cameraUBO;
 	cameraUBO.Create(&base, sizeof(CameraUBO) * 2, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
-	VkDescriptorSetAllocateInfo setAllocInfo = {};
-	setAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	setAllocInfo.descriptorPool = descriptorPool;
-	setAllocInfo.descriptorSetCount = 1;
-	setAllocInfo.pSetLayouts = &buffersSetLayout;
-
-	if (vkAllocateDescriptorSets(device, &setAllocInfo, &globalBuffersSet) != VK_SUCCESS)
-	{
-		std::cout << "failed to allocate descriptor sets\n";
-		return 1;
-	}
-
-	setAllocInfo.descriptorSetCount = 1;
-	setAllocInfo.pSetLayouts = &texturesSetLayout;
-	if (vkAllocateDescriptorSets(device, &setAllocInfo, &globalTexturesSet) != VK_SUCCESS)
-	{
-		std::cout << "failed to allocate descriptor sets\n";
-		return 1;
-	}
-
-	std::cout << "Allocated descriptor sets\n";
-
-	// Global buffers set update
 
 	VkDescriptorBufferInfo bufferInfo = {};
 	bufferInfo.buffer = cameraUBO.GetBuffer();
 	bufferInfo.offset = 0;
 	bufferInfo.range = VK_WHOLE_SIZE;
 
-	VkWriteDescriptorSet descWrite = {};
-	descWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	descWrite.dstSet = globalBuffersSet;
-	descWrite.dstBinding = 0;
-	descWrite.dstArrayElement = 0;
-	descWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-	descWrite.descriptorCount = 1;
-	descWrite.pBufferInfo = &bufferInfo;
-
-	vkUpdateDescriptorSets(device, 1, &descWrite, 0, nullptr);
-
-	// Global Textures set update
+	renderer.UpdateGlobalBuffersSet(bufferInfo, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
 
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
@@ -369,49 +145,9 @@ int main()
 	imageInfo2.imageView = storageTexture.GetImageView();
 	imageInfo2.sampler = storageTexture.GetSampler();
 
-	VkWriteDescriptorSet shadowMapWrite = {};
-	shadowMapWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	shadowMapWrite.dstSet = globalTexturesSet;
-	shadowMapWrite.dstBinding = 0;
-	shadowMapWrite.dstArrayElement = 0;
-	shadowMapWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	shadowMapWrite.descriptorCount = 1;
-	shadowMapWrite.pImageInfo = &imageInfo;
+	renderer.UpdateGlobalTexturesSet(imageInfo, 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	renderer.UpdateGlobalTexturesSet(imageInfo2, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
-	VkWriteDescriptorSet storageWrite = {};
-	storageWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	storageWrite.dstSet = globalTexturesSet;
-	storageWrite.dstBinding = 1;
-	storageWrite.dstArrayElement = 0;
-	storageWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	storageWrite.descriptorCount = 1;
-	storageWrite.pImageInfo = &imageInfo2;
-
-	VkWriteDescriptorSet writes[] = { shadowMapWrite, storageWrite };
-
-	vkUpdateDescriptorSets(device, 2, writes, 0, nullptr);
-
-
-	VkVertexInputBindingDescription bindingDesc = {};
-	bindingDesc.binding = 0;
-	bindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	bindingDesc.stride = sizeof(Vertex);
-
-	VkVertexInputAttributeDescription attribDesc[3] = {};
-	attribDesc[0].binding = 0;
-	attribDesc[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-	attribDesc[0].location = 0;
-	attribDesc[0].offset = 0;
-
-	attribDesc[1].binding = 0;
-	attribDesc[1].format = VK_FORMAT_R32G32_SFLOAT;
-	attribDesc[1].location = 1;
-	attribDesc[1].offset = offsetof(Vertex, uv);
-
-	attribDesc[2].binding = 0;
-	attribDesc[2].format = VK_FORMAT_R32G32B32_SFLOAT;
-	attribDesc[2].location = 2;
-	attribDesc[2].offset = offsetof(Vertex, normal);
 
 
 	PipelineInfo pipeInfo = VKPipeline::DefaultFillStructs();
@@ -428,10 +164,6 @@ int main()
 		VK_DYNAMIC_STATE_VIEWPORT,
 	};
 
-	pipeInfo.vertexInput.vertexBindingDescriptionCount = 1;
-	pipeInfo.vertexInput.pVertexBindingDescriptions = &bindingDesc;
-	pipeInfo.vertexInput.vertexAttributeDescriptionCount = 3;
-	pipeInfo.vertexInput.pVertexAttributeDescriptions = attribDesc;
 
 	// No need to set the viewport because it's dynamic
 	pipeInfo.viewportState.viewportCount = 1;
@@ -443,22 +175,6 @@ int main()
 
 	pipeInfo.dynamicState.dynamicStateCount = 1;
 	pipeInfo.dynamicState.pDynamicStates = dynamicStates;
-
-	
-
-	VKShader modelShader;
-	modelShader.LoadShader(device, "Data/Shaders/shader_vert.spv", "Data/Shaders/shader_frag.spv");
-
-	VKPipeline modelPipeline;
-	if (!modelPipeline.Create(device, pipeInfo, pipelineLayout, modelShader, offscreenFB.GetRenderPass()))
-		return 1;
-
-
-
-	
-
-
-	
 
 	// OFFSCREEN
 
@@ -478,16 +194,18 @@ int main()
 	postQuadShader.LoadShader(device, "Data/Shaders/post_quad_vert.spv", "Data/Shaders/post_quad_frag.spv");
 
 	VKPipeline postQuadPipeline;
-	if(!postQuadPipeline.Create(device, pipeInfo, pipelineLayout, postQuadShader, renderer.GetDefaultRenderPass()))
+	if(!postQuadPipeline.Create(device, pipeInfo, renderer.GetPipelineLayout(), postQuadShader, renderer.GetDefaultRenderPass()))
 		return 1;
 
 	// SHADOW MAPPING
 
+	VkVertexInputBindingDescription bindingDesc = {};
 	bindingDesc = {};
 	bindingDesc.binding = 0;
 	bindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
 	bindingDesc.stride = sizeof(Vertex);
 
+	VkVertexInputAttributeDescription attribDesc[3] = {};
 	attribDesc[0].binding = 0;
 	attribDesc[0].format = VK_FORMAT_R32G32B32_SFLOAT;
 	attribDesc[0].location = 0;
@@ -516,24 +234,11 @@ int main()
 	shadowShader.LoadShader(device, "Data/Shaders/shadow_vert.spv", "Data/Shaders/shadow_frag.spv");
 
 	VKPipeline shadowPipeline;
-	if(!shadowPipeline.Create(device, pipeInfo, pipelineLayout, shadowShader, shadowFB.GetRenderPass()))
+	if(!shadowPipeline.Create(device, pipeInfo, renderer.GetPipelineLayout(), shadowShader, shadowFB.GetRenderPass()))
 		return 1;
 
 
-
-	setAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	setAllocInfo.descriptorPool = descriptorPool;
-	setAllocInfo.descriptorSetCount = 1;
-	setAllocInfo.pSetLayouts = &userTexturesSetLayout;
-
-	VkDescriptorSet quadSet;
-
-	if (vkAllocateDescriptorSets(device, &setAllocInfo, &quadSet) != VK_SUCCESS)
-	{
-		std::cout << "failed to allocate descriptor sets\n";
-		return 1;
-	}
-
+	VkDescriptorSet quadSet = renderer.AllocateUserTextureDescriptorSet();
 	
 	imageInfo2.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 	imageInfo2.imageView = offscreenFB.GetFirstColorTexture().GetImageView();
@@ -584,16 +289,7 @@ int main()
 		return 1;
 	}
 
-	VkDescriptorSet computeSet;
-
-	setAllocInfo.descriptorSetCount = 1;
-	setAllocInfo.pSetLayouts = &computeSetLayout;
-
-	if (vkAllocateDescriptorSets(device, &setAllocInfo, &computeSet) != VK_SUCCESS)
-	{
-		std::cout << "Failed to allocate descriptor set\n";
-		return 1;
-	}
+	VkDescriptorSet computeSet = renderer.AllocateSetFromLayout(computeSetLayout);
 
 	VkDescriptorImageInfo compImgInfo = {};
 	compImgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -777,50 +473,6 @@ int main()
 		vkQueueWaitIdle(base.GetGraphicsQueue());		// Or wait for fence?
 
 		renderer.FreeGraphicsCommandBuffer(cmd);
-
-		/*VkCommandBuffer transferOwnershipCmdBuffer = renderer.CreateComputeCommandBuffer(true);
-
-		VkImageMemoryBarrier acquireBarrier = {};
-		acquireBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		acquireBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-		acquireBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-		acquireBarrier.srcAccessMask = 0;
-		acquireBarrier.dstAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-		acquireBarrier.srcQueueFamilyIndex = indices.graphicsFamilyIndex;
-		acquireBarrier.dstQueueFamilyIndex = indices.computeFamilyIndex;
-		acquireBarrier.subresourceRange = range;
-		acquireBarrier.image = storageTexture.GetImage();
-
-		vkCmdPipelineBarrier(transferOwnershipCmdBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &acquireBarrier);
-
-		//VkImageMemoryBarrier releaseBarrier = {};
-		releaseBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		releaseBarrier.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
-		releaseBarrier.newLayout = VK_IMAGE_LAYOUT_GENERAL;
-		releaseBarrier.srcAccessMask = VK_ACCESS_SHADER_WRITE_BIT;
-		releaseBarrier.dstAccessMask = 0;
-		releaseBarrier.srcQueueFamilyIndex = indices.computeFamilyIndex;
-		releaseBarrier.dstQueueFamilyIndex = indices.graphicsFamilyIndex;
-		releaseBarrier.subresourceRange = range;
-		releaseBarrier.image = storageTexture.GetImage();
-
-		vkCmdPipelineBarrier(transferOwnershipCmdBuffer, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &releaseBarrier);
-		
-		vkEndCommandBuffer(transferOwnershipCmdBuffer);
-
-		//VkSubmitInfo info = {};
-		info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-		info.commandBufferCount = 1;
-		info.pCommandBuffers = &transferOwnershipCmdBuffer;
-
-		if (vkQueueSubmit(base.GetComputeQueue(), 1, &info, VK_NULL_HANDLE) != VK_SUCCESS)
-		{
-			std::cout << "Failed to submit\n";
-			return 1;
-		}
-		vkQueueWaitIdle(base.GetComputeQueue());		// Or wait for fence?
-
-		renderer.FreeComputeCommandBuffer(transferOwnershipCmdBuffer);*/
 	}
 
 	
@@ -881,7 +533,7 @@ int main()
 	quadStorageShader.LoadShader(device, "Data/Shaders/quad_Vert.spv", "Data/Shaders/quad_frag.spv");
 
 	VKPipeline quadStoragePipeline;
-	if (!quadStoragePipeline.Create(device, pipeInfo, pipelineLayout, quadStorageShader, offscreenFB.GetRenderPass()))
+	if (!quadStoragePipeline.Create(device, pipeInfo, renderer.GetPipelineLayout(), quadStorageShader, offscreenFB.GetRenderPass()))
 		return 1;
 
 
@@ -894,14 +546,14 @@ int main()
 
 	for (size_t i = 0; i < models.size(); i++)
 	{
-		CreateMipMaps(cmdBuffer, models[i].texture);
+		renderer.CreateMipMaps(cmdBuffer, models[i].texture);
 	}
 
 	const std::vector<ParticleSystem>& particleSystems = particleManager.GetParticlesystems();
 
 	for (size_t i = 0; i < particleSystems.size(); i++)
 	{
-		CreateMipMaps(cmdBuffer, particleSystems[i].GetTexture());
+		renderer.CreateMipMaps(cmdBuffer, particleSystems[i].GetTexture());
 	}
 
 	if (vkEndCommandBuffer(cmdBuffer) != VK_SUCCESS)
@@ -996,6 +648,10 @@ int main()
 
 		VkCommandBuffer cmdBuffer = renderer.GetCurrentCmdBuffer();
 
+		VkPipelineLayout pipelineLayout = renderer.GetPipelineLayout();
+		VkDescriptorSet globalBuffersSet = renderer.GetGlobalBuffersSet();
+		VkDescriptorSet globalTexturesSet = renderer.GetGlobalTexturesSet();
+
 		// Bind the camera descriptor set with the ubo
 		//vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &buffersSet, 0, nullptr);
 		uint32_t dynamicOffset = static_cast<uint32_t>(currentCamera) * alignSingleUBOSize;
@@ -1022,11 +678,7 @@ int main()
 		depthClearValue.depthStencil = { 1.0f, 0 };
 
 		renderer.BeginRenderPass(cmdBuffer, shadowFB, 1, &depthClearValue);
-
-		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shadowPipeline.GetPipeline());
-
-		modelManager.Render(cmdBuffer, pipelineLayout);
-
+		modelManager.Render(cmdBuffer, pipelineLayout, shadowPipeline.GetPipeline());
 		vkCmdEndRenderPass(cmdBuffer);
 
 		// OFFSCREEN
@@ -1077,9 +729,8 @@ int main()
 		clearValues[1].depthStencil = { 1.0f, 0 };
 
 		renderer.BeginRenderPass(cmdBuffer, offscreenFB, 2, clearValues);
-
-		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, modelPipeline.GetPipeline());		
-		modelManager.Render(cmdBuffer, pipelineLayout);
+	
+		modelManager.Render(cmdBuffer, pipelineLayout, VK_NULL_HANDLE);
 
 		VkBuffer vertexBuffers[] = { VK_NULL_HANDLE };
 		VkDeviceSize offsets[] = { 0 };
@@ -1094,7 +745,7 @@ int main()
 		skybox.Render(cmdBuffer, pipelineLayout);
 
 		// Particle systems have to be rendered after the skybox
-		particleManager.Render(cmdBuffer);
+		particleManager.Render(cmdBuffer, renderer.GetPipelineLayout());
 
 
 		vkCmdEndRenderPass(cmdBuffer);
@@ -1171,10 +822,6 @@ int main()
 	if (camerasData)
 		free(camerasData);
 
-	vkDestroyDescriptorSetLayout(device, buffersSetLayout, nullptr);
-	vkDestroyDescriptorSetLayout(device, texturesSetLayout, nullptr);
-	vkDestroyDescriptorSetLayout(device, userTexturesSetLayout, nullptr);
-
 	quadStoragePipeline.Dispose(device);
 	quadStorageShader.Dispose(device);
 	quadVb.Dispose(device);
@@ -1192,21 +839,14 @@ int main()
 	vkDestroySemaphore(device, computeSemaphore, nullptr);
 	vkDestroySemaphore(device, graphicsSemaphore, nullptr);
 	
-
 	modelManager.Dispose(device);
 	particleManager.Dispose(device);
 	skybox.Dispose(device);
-
-	modelShader.Dispose(device);
+	
 	postQuadShader.Dispose(device);
 	shadowShader.Dispose(device);
-
-	modelPipeline.Dispose(device);
 	postQuadPipeline.Dispose(device);
 	shadowPipeline.Dispose(device);
-
-	vkDestroyDescriptorPool(device, descriptorPool, nullptr);
-	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
 
 	renderer.Dispose();
 	base.Dispose();

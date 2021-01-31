@@ -91,7 +91,10 @@
       <Filter>Source Files\Graphics</Filter>
     </ClCompile>
     <ClCompile Include="ParticleManager.cpp">
-      <Filter>Source Files</Filter>
+      <Filter>Source Files\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="RenderingPath.cpp">
+      <Filter>Source Files\Graphics</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -150,7 +153,13 @@
       <Filter>Header Files\Graphics</Filter>
     </ClInclude>
     <ClInclude Include="ParticleManager.h">
-      <Filter>Header Files</Filter>
+      <Filter>Header Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="UniformBufferTypes.h">
+      <Filter>Header Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="RenderingPath.h">
+      <Filter>Header Files\Graphics</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

@@ -155,6 +155,7 @@
     <ClCompile Include="ParticleManager.cpp" />
     <ClCompile Include="ParticleSystem.cpp" />
     <ClCompile Include="Random.cpp" />
+    <ClCompile Include="RenderingPath.cpp" />
     <ClCompile Include="Skybox.cpp" />
     <ClCompile Include="stb.cpp" />
     <ClCompile Include="VKBase.cpp" />
@@ -176,7 +177,9 @@
     <ClInclude Include="ParticleManager.h" />
     <ClInclude Include="ParticleSystem.h" />
     <ClInclude Include="Random.h" />
+    <ClInclude Include="RenderingPath.h" />
     <ClInclude Include="Skybox.h" />
+    <ClInclude Include="UniformBufferTypes.h" />
     <ClInclude Include="VertexTypes.h" />
     <ClInclude Include="VKBase.h" />
     <ClInclude Include="VKBuffer.h" />

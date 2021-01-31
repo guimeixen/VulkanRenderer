@@ -4,17 +4,11 @@
 
 ParticleManager::ParticleManager()
 {
-	descriptorPool = VK_NULL_HANDLE;
-	userTexturesSetLayout = VK_NULL_HANDLE;
-	pipelineLayout = VK_NULL_HANDLE;
 }
 
-bool ParticleManager::Init(VKBase& base, VkDescriptorPool descriptorPool, VkDescriptorSetLayout userTexturesSetLayout, VkPipelineLayout pipelineLayout, VkRenderPass renderPass)
+bool ParticleManager::Init(VKRenderer& renderer, VkRenderPass renderPass)
 {
-	this->descriptorPool = descriptorPool;
-	this->userTexturesSetLayout = userTexturesSetLayout;
-	this->pipelineLayout = pipelineLayout;
-
+	VKBase& base = renderer.GetBase();
 	// Create the particle system pipeline
 
 	PipelineInfo pipeInfo = VKPipeline::DefaultFillStructs();
@@ -83,7 +77,7 @@ bool ParticleManager::Init(VKBase& base, VkDescriptorPool descriptorPool, VkDesc
 
 	shader.LoadShader(base.GetDevice(), "Data/Shaders/particle_vert.spv", "Data/Shaders/particle_frag.spv");
 
-	if (!pipeline.Create(base.GetDevice(), pipeInfo, pipelineLayout, shader, renderPass))
+	if (!pipeline.Create(base.GetDevice(), pipeInfo, renderer.GetPipelineLayout(), shader, renderPass))
 	{
 		std::cout << "Failed to create particle system pipeline\n";
 		return false;
@@ -92,10 +86,10 @@ bool ParticleManager::Init(VKBase& base, VkDescriptorPool descriptorPool, VkDesc
 	return true;
 }
 
-bool ParticleManager::AddParticleSystem(VKBase& base, const std::string texturePath, unsigned int maxParticles)
+bool ParticleManager::AddParticleSystem(VKRenderer& renderer, const std::string texturePath, unsigned int maxParticles)
 {
 	ParticleSystem particleSystem;
-	if (!particleSystem.Init(base, texturePath, maxParticles, descriptorPool, userTexturesSetLayout))
+	if (!particleSystem.Init(renderer, texturePath, maxParticles))
 		return false;
 
 	particleSystems.push_back(particleSystem);
@@ -103,7 +97,7 @@ bool ParticleManager::AddParticleSystem(VKBase& base, const std::string textureP
 	return true;
 }
 
-void ParticleManager::Render(VkCommandBuffer cmdBuffer)
+void ParticleManager::Render(VkCommandBuffer cmdBuffer, VkPipelineLayout pipelineLayout)
 {
 	for (size_t i = 0; i < particleSystems.size(); i++)
 	{

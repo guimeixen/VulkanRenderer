@@ -13,9 +13,11 @@ ParticleSystem::ParticleSystem()
 	startLifeTime = 1.0f;
 }
 
-bool ParticleSystem::Init(VKBase& base, const std::string texturePath, unsigned int maxParticles, VkDescriptorPool descriptorPool, VkDescriptorSetLayout userTexturesSetLayout)
+bool ParticleSystem::Init(VKRenderer& renderer, const std::string texturePath, unsigned int maxParticles)
 {
 	this->maxParticles = maxParticles;
+
+	VKBase& base = renderer.GetBase();
 
 	TextureParams textureParams = {};
 	textureParams.format = VK_FORMAT_R8G8B8A8_SRGB;
@@ -63,17 +65,7 @@ bool ParticleSystem::Init(VKBase& base, const std::string texturePath, unsigned 
 		RespawnParticle(particles[0]);		// Spawn one particle so they get update initially
 	}
 
-	VkDescriptorSetAllocateInfo setAllocInfo = {};
-	setAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	setAllocInfo.descriptorPool = descriptorPool;
-	setAllocInfo.descriptorSetCount = 1;
-	setAllocInfo.pSetLayouts = &userTexturesSetLayout;
-
-	if (vkAllocateDescriptorSets(device, &setAllocInfo, &set) != VK_SUCCESS)
-	{
-		std::cout << "failed to allocate descriptor sets\n";
-		return false;
-	}
+	set = renderer.AllocateUserTextureDescriptorSet();
 
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

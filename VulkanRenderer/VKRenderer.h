@@ -17,6 +17,12 @@ public:
 	void AcquireNextImage();
 	void Present(VkSemaphore graphicsSemaphore, VkSemaphore computeSemaphore);
 
+	void CreateMipMaps(VkCommandBuffer cmdBuffer, const VKTexture2D& texture);
+	VkDescriptorSet AllocateUserTextureDescriptorSet();
+	VkDescriptorSet AllocateSetFromLayout(VkDescriptorSetLayout layout);
+	void UpdateGlobalBuffersSet(const VkDescriptorBufferInfo& info, uint32_t binding, VkDescriptorType descriptorType);
+	void UpdateGlobalTexturesSet(const VkDescriptorImageInfo& info, uint32_t binding, VkDescriptorType descriptorType);
+
 	VkCommandBuffer CreateGraphicsCommandBuffer(bool beginRecord);
 	VkCommandBuffer CreateComputeCommandBuffer(bool beginRecord);
 	void FreeGraphicsCommandBuffer(VkCommandBuffer cmdBuffer);
@@ -38,6 +44,10 @@ public:
 	VkSemaphore GetRenderFinishedSemaphore() const { return renderFinishedSemaphores[currentFrame]; }
 	VkSemaphore GetImageAvailableSemaphore() const { return imageAvailableSemaphores[currentFrame]; }
 
+	VkPipelineLayout GetPipelineLayout() const { return pipelineLayout; }
+	VkDescriptorSet GetGlobalBuffersSet() const { return globalBuffersSet; }
+	VkDescriptorSet GetGlobalTexturesSet() const { return globalTexturesSet; }
+
 private:
 	bool CreateRenderPass(const VKBase& base, VkRenderPass& renderPass, VkFormat depthFormat);
 	bool CreateFramebuffers(const VKBase& base, VkRenderPass renderPass, std::vector<VkFramebuffer>& framebuffers, VkImageView depthImageView);
@@ -58,5 +68,13 @@ private:
 	std::vector<VkFence> frameFences;
 	std::vector<VkFence> imagesInFlight;
 	std::vector<VkCommandBuffer> cmdBuffers;
+
+	VkDescriptorPool descriptorPool;
+	VkDescriptorSetLayout globalBuffersSetLayout;
+	VkDescriptorSetLayout globalTexturesSetLayout;
+	VkDescriptorSetLayout userTexturesSetLayout;	
+	VkDescriptorSet globalBuffersSet;
+	VkDescriptorSet globalTexturesSet;
+	VkPipelineLayout pipelineLayout;
 };
 

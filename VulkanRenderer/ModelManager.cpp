@@ -1,4 +1,5 @@
 #include "ModelManager.h"
+#include "VertexTypes.h"
 
 #include <iostream>
 
@@ -6,14 +7,80 @@ ModelManager::ModelManager()
 {
 }
 
-void ModelManager::Init(VKBase& base, VkDescriptorPool descriptorPool, VkDescriptorSetLayout userTexturesSetLayout)
+bool ModelManager::Init(VKRenderer& renderer, VkRenderPass renderPass)
 {
-	this->descriptorPool = descriptorPool;
-	this->userTexturesSetLayout = userTexturesSetLayout;
+	// Create the pipeline
+
+	VkVertexInputBindingDescription bindingDesc = {};
+	bindingDesc.binding = 0;
+	bindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+	bindingDesc.stride = sizeof(Vertex);
+
+	VkVertexInputAttributeDescription attribDesc[3] = {};
+	attribDesc[0].binding = 0;
+	attribDesc[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+	attribDesc[0].location = 0;
+	attribDesc[0].offset = 0;
+
+	attribDesc[1].binding = 0;
+	attribDesc[1].format = VK_FORMAT_R32G32_SFLOAT;
+	attribDesc[1].location = 1;
+	attribDesc[1].offset = offsetof(Vertex, uv);
+
+	attribDesc[2].binding = 0;
+	attribDesc[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+	attribDesc[2].location = 2;
+	attribDesc[2].offset = offsetof(Vertex, normal);
+
+
+	VKBase& base = renderer.GetBase();
+
+	PipelineInfo pipeInfo = VKPipeline::DefaultFillStructs();
+
+	VkRect2D scissor = {};
+	scissor.offset = { 0, 0 };
+	scissor.extent = base.GetSurfaceExtent();
+
+	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
+	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+	colorBlendAttachment.blendEnable = VK_FALSE;
+
+	VkDynamicState dynamicStates[] = {
+		VK_DYNAMIC_STATE_VIEWPORT,
+	};
+
+	pipeInfo.vertexInput.vertexBindingDescriptionCount = 1;
+	pipeInfo.vertexInput.pVertexBindingDescriptions = &bindingDesc;
+	pipeInfo.vertexInput.vertexAttributeDescriptionCount = 3;
+	pipeInfo.vertexInput.pVertexAttributeDescriptions = attribDesc;
+
+	// No need to set the viewport because it's dynamic
+	pipeInfo.viewportState.viewportCount = 1;
+	pipeInfo.viewportState.scissorCount = 1;
+	pipeInfo.viewportState.pScissors = &scissor;
+
+	pipeInfo.colorBlending.attachmentCount = 1;
+	pipeInfo.colorBlending.pAttachments = &colorBlendAttachment;
+
+	pipeInfo.dynamicState.dynamicStateCount = 1;
+	pipeInfo.dynamicState.pDynamicStates = dynamicStates;
+
+
+	shader.LoadShader(base.GetDevice(), "Data/Shaders/shader_vert.spv", "Data/Shaders/shader_frag.spv");
+
+	if (!pipeline.Create(base.GetDevice(), pipeInfo, renderer.GetPipelineLayout(), shader, renderPass))
+	{
+		std::cout << "Failed to create model pipeline\n";
+		return false;
+	}
+
+	return true;
 }
 
-bool ModelManager::AddModel(VKBase& base, const std::string& path, const std::string& texturePath)
+bool ModelManager::AddModel(VKRenderer& renderer, const std::string& path, const std::string& texturePath)
 {
+	VKBase& base = renderer.GetBase();
+
 	RenderModel renderModel = {};
 
 	if (renderModel.model.Load(base, path) == false)
@@ -35,17 +102,7 @@ bool ModelManager::AddModel(VKBase& base, const std::string& path, const std::st
 
 	VkDevice device = base.GetDevice();
 
-	VkDescriptorSetAllocateInfo setAllocInfo = {};
-	setAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
-	setAllocInfo.descriptorPool = descriptorPool;
-	setAllocInfo.descriptorSetCount = 1;
-	setAllocInfo.pSetLayouts = &userTexturesSetLayout;
-
-	if (vkAllocateDescriptorSets(device, &setAllocInfo, &renderModel.set) != VK_SUCCESS)
-	{
-		std::cout << "failed to allocate descriptor sets\n";
-		return 1;
-	}
+	renderModel.set = renderer.AllocateUserTextureDescriptorSet();
 
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -68,8 +125,17 @@ bool ModelManager::AddModel(VKBase& base, const std::string& path, const std::st
 	return true;
 }
 
-void ModelManager::Render(VkCommandBuffer cmdBuffer, VkPipelineLayout pipelineLayout)
+void ModelManager::Render(VkCommandBuffer cmdBuffer, VkPipelineLayout pipelineLayout, VkPipeline shadowMapPipeline)
 {
+	if (shadowMapPipeline != VK_NULL_HANDLE)
+	{
+		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, shadowMapPipeline);
+	}
+	else
+	{
+		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.GetPipeline());
+	}
+
 	VkBuffer vertexBuffers[] = { VK_NULL_HANDLE };
 	VkDeviceSize offsets[] = { 0 };
 
@@ -92,4 +158,7 @@ void ModelManager::Dispose(VkDevice device)
 		models[i].model.Dispose(device);
 		models[i].texture.Dispose(device);
 	}
+
+	shader.Dispose(device);
+	pipeline.Dispose(device);
 }
