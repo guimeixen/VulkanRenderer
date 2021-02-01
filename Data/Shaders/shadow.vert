@@ -1,16 +1,15 @@
 #version 450
+#include "ubos.glsl"
+#include "utils.glsl"
 
 layout(location = 0) in vec3 inPos;
 
-layout(set = 0, binding = 0) uniform CameraUBO
+layout(push_constant) uniform PushConsts
 {
-	mat4 proj;
-	mat4 view;
-	mat4 model;
-	mat4 lightSpaceMatrix;
-} ubo;
+	uint startIndex;
+};
 
 void main()
 {
-    gl_Position = ubo.proj * ubo.view * ubo.model * vec4(inPos, 1.0);
+    gl_Position = ubo.proj * ubo.view * GetModelMatrix(startIndex) * vec4(inPos, 1.0);
 }

@@ -1,4 +1,5 @@
 #version 450
+#include "ubos.glsl"
 
 layout(location = 0) in vec4 inPosUv;
 layout(location = 1) in vec4 inst_Pos;			// xyz - Particle position in world space, w - unused
@@ -6,14 +7,6 @@ layout(location = 2) in vec4 inst_Color;
 
 layout(location = 0) out vec2 uv;
 layout(location = 1) out vec4 particleColor;
-
-layout(set = 0, binding = 0) uniform CameraUBO
-{
-	mat4 proj;
-	mat4 view;
-	mat4 model;
-	mat4 lightSpaceMatrix;
-} ubo;
 
 void main()
 {

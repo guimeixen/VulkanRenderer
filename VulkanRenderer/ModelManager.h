@@ -25,11 +25,9 @@ public:
 	void Dispose(VkDevice device);
 
 	const std::vector<RenderModel>& GetRenderModels() const { return models; }
-	const std::vector<glm::mat4>& GetModelsMatrices() const { return modelMatrices; }
 
 private:
 	std::vector<RenderModel> models;
-	std::vector<glm::mat4> modelMatrices;
 
 	unsigned int instanceDataOffset;
 

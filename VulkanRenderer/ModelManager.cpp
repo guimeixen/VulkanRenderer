@@ -123,8 +123,6 @@ bool ModelManager::AddModel(VKRenderer& renderer, const std::string& path, const
 
 	models.push_back(renderModel);
 
-	modelMatrices.push_back(glm::mat4(1.0f));
-
 	return true;
 }
 

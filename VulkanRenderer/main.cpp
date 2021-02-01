@@ -9,6 +9,9 @@
 #include "ModelManager.h"
 #include "Skybox.h"
 #include "UniformBufferTypes.h"
+#include "EntityManager.h"
+#include "TransformManager.h"
+#include "Allocator.h"
 
 #include "glm/gtc/matrix_transform.hpp"
 
@@ -28,6 +31,16 @@ int main()
 	InputManager inputManager;
 	Window window;
 	window.Init(&inputManager, width, height);
+
+	Allocator allocator;
+	EntityManager entityManager;
+	TransformManager transformManager;
+	transformManager.Init(&allocator, 10);
+
+	Entity e[2] = { entityManager.Create(), entityManager.Create() };
+	transformManager.AddTransform(e[0]);
+	transformManager.AddTransform(e[1]);
+
 
 	VKRenderer renderer;
 	if (!renderer.Init(window.GetHandle(), width, height))
@@ -641,14 +654,15 @@ int main()
 		glm::mat4 lightView = glm::lookAt(glm::vec3(0.0f, 2.0f, 2.5f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 00.0f));
 		glm::mat4 lightSpaceMatrix = lightProj * lightView;
 
-		glm::mat4 modelMatrix = glm::rotate(glm::mat4(1.0f), time * glm::radians(20.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		//glm::mat4 modelMatrix = glm::rotate(glm::mat4(1.0f), time * glm::radians(20.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
 		CameraUBO* ubo = (CameraUBO*)(((uint64_t)camerasData + (currentCamera * alignSingleUBOSize)));
 		if (ubo)
 		{
-			ubo->model = modelMatrix;
+			
 			ubo->view = lightView;
 			ubo->proj = lightProj;
+			ubo->projView = lightProj * lightView;
 			ubo->proj[1][1] *= -1;
 		}
 
@@ -697,9 +711,9 @@ int main()
 		ubo = (CameraUBO*)(((uint64_t)camerasData + (currentCamera * alignSingleUBOSize)));
 		if (ubo)
 		{
-			ubo->model = modelMatrix;
 			ubo->view = camera.GetViewMatrix();
 			ubo->proj = camera.GetProjectionMatrix();
+			ubo->projView = ubo->proj * ubo->view;
 			ubo->proj[1][1] *= -1;
 			ubo->lightSpaceMatrix = lightSpaceMatrix;
 		}
@@ -797,12 +811,19 @@ int main()
 		memcpy(mapped, camerasData, static_cast<size_t>(currentCamera + 1) * alignSingleUBOSize);
 		cameraUBO.Unmap(device);
 
-		const std::vector<glm::mat4>& modelMatrices = modelManager.GetModelsMatrices();
+		//transformManager.setlo
+		transformManager.SetLocalPosition(e[0], glm::vec3(0.0f, 0.0f, 8.0f));
 
-		glm::mat4 m[2] = {glm::mat4(1.0f), glm::mat4(1.0f)};
-
+		// Update model matrices
 		mapped = instanceDataBuffer.Map(device, 0, VK_WHOLE_SIZE);
-		memcpy(mapped, m, 2 * sizeof(glm::mat4));
+		size_t offset = 0;
+		for (size_t i = 0; i < modelManager.GetRenderModels().size(); i++)
+		{
+			void* ptr = (char*)mapped + offset;
+			memcpy(ptr, &transformManager.GetLocalToWorld(e[i]), sizeof(glm::mat4));
+			offset += sizeof(glm::mat4);
+		}
+
 		instanceDataBuffer.Unmap(device);
 
 		particleManager.Update(device, deltaTime);
@@ -847,6 +868,8 @@ int main()
 	cameraUBO.Dispose(device);
 	offscreenFB.Dispose(device);
 	shadowFB.Dispose(device);
+	instanceDataBuffer.Dispose(device);
+
 
 	vkDestroyFence(device, computeFence, nullptr);
 	storageTexture.Dispose(device);
@@ -866,6 +889,7 @@ int main()
 	postQuadPipeline.Dispose(device);
 	shadowPipeline.Dispose(device);
 
+	transformManager.Dispose();
 	renderer.Dispose();
 	base.Dispose();
 
