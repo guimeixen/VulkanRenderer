@@ -5,6 +5,7 @@
 
 ModelManager::ModelManager()
 {
+	instanceDataOffset = 0;
 }
 
 bool ModelManager::Init(VKRenderer& renderer, VkRenderPass renderPass)
@@ -122,6 +123,8 @@ bool ModelManager::AddModel(VKRenderer& renderer, const std::string& path, const
 
 	models.push_back(renderModel);
 
+	modelMatrices.push_back(glm::mat4(1.0f));
+
 	return true;
 }
 
@@ -146,9 +149,14 @@ void ModelManager::Render(VkCommandBuffer cmdBuffer, VkPipelineLayout pipelineLa
 		vertexBuffers[0] = m.GetVertexBuffer().GetBuffer();
 		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
 		vkCmdBindIndexBuffer(cmdBuffer, m.GetIndexBuffer().GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
+		vkCmdPushConstants(cmdBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(unsigned int), &instanceDataOffset);
 		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &models[i].set, 0, nullptr);
 		vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(m.GetIndexCount()), 1, 0, 0, 0);
+
+		instanceDataOffset += 1;
 	}
+
+	instanceDataOffset = 0;
 }
 
 void ModelManager::Dispose(VkDevice device)

@@ -1,7 +1,6 @@
 #pragma once
 
 #include "VKBase.h"
-#include "VKTexture2D.h"
 #include "VKFramebuffer.h"
 
 struct GLFWWindow;

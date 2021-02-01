@@ -128,12 +128,22 @@ int main()
 	VKBuffer cameraUBO;
 	cameraUBO.Create(&base, sizeof(CameraUBO) * 2, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
+	// Create a large buffer which will hold the model matrices
+	VKBuffer instanceDataBuffer;
+	instanceDataBuffer.Create(&base, sizeof(glm::mat4) * 32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
 	VkDescriptorBufferInfo bufferInfo = {};
 	bufferInfo.buffer = cameraUBO.GetBuffer();
 	bufferInfo.offset = 0;
 	bufferInfo.range = VK_WHOLE_SIZE;
 
 	renderer.UpdateGlobalBuffersSet(bufferInfo, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
+
+	bufferInfo.buffer = instanceDataBuffer.GetBuffer();
+	bufferInfo.offset = 0;
+	bufferInfo.range = VK_WHOLE_SIZE;
+
+	renderer.UpdateGlobalBuffersSet(bufferInfo, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
@@ -786,6 +796,14 @@ int main()
 		void* mapped = cameraUBO.Map(device, 0, VK_WHOLE_SIZE);
 		memcpy(mapped, camerasData, static_cast<size_t>(currentCamera + 1) * alignSingleUBOSize);
 		cameraUBO.Unmap(device);
+
+		const std::vector<glm::mat4>& modelMatrices = modelManager.GetModelsMatrices();
+
+		glm::mat4 m[2] = {glm::mat4(1.0f), glm::mat4(1.0f)};
+
+		mapped = instanceDataBuffer.Map(device, 0, VK_WHOLE_SIZE);
+		memcpy(mapped, m, 2 * sizeof(glm::mat4));
+		instanceDataBuffer.Unmap(device);
 
 		particleManager.Update(device, deltaTime);
 

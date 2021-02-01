@@ -79,7 +79,7 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 
 	// Descriptor pool
 
-	VkDescriptorPoolSize poolSizes[3] = {};
+	VkDescriptorPoolSize poolSizes[4] = {};
 	poolSizes[0].descriptorCount = 1;
 	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 
@@ -89,10 +89,13 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 	poolSizes[2].descriptorCount = 1;
 	poolSizes[2].type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
 
+	poolSizes[3].descriptorCount = 1;
+	poolSizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+
 	VkDescriptorPoolCreateInfo descPoolInfo = {};
 	descPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
 	descPoolInfo.maxSets = 8;
-	descPoolInfo.poolSizeCount = 3;
+	descPoolInfo.poolSizeCount = 4;
 	descPoolInfo.pPoolSizes = poolSizes;
 
 	if (vkCreateDescriptorPool(device, &descPoolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
@@ -110,10 +113,18 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 	cameraUboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 	cameraUboBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
+	VkDescriptorSetLayoutBinding instanceBufferBinding = {};
+	instanceBufferBinding.binding = 1;
+	instanceBufferBinding.descriptorCount = 1;
+	instanceBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+	instanceBufferBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+	VkDescriptorSetLayoutBinding globalBuffersSetBindings[] = { cameraUboBinding, instanceBufferBinding };
+
 	VkDescriptorSetLayoutCreateInfo globalBuffersSetLayoutInfo = {};
 	globalBuffersSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	globalBuffersSetLayoutInfo.bindingCount = 1;
-	globalBuffersSetLayoutInfo.pBindings = &cameraUboBinding;
+	globalBuffersSetLayoutInfo.bindingCount = 2;
+	globalBuffersSetLayoutInfo.pBindings = globalBuffersSetBindings;
 
 	if (vkCreateDescriptorSetLayout(device, &globalBuffersSetLayoutInfo, nullptr, &globalBuffersSetLayout) != VK_SUCCESS)
 	{
@@ -167,6 +178,11 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 		return false;
 	}
 
+	VkPushConstantRange pushConstantRange = {};
+	pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	pushConstantRange.offset = 0;
+	pushConstantRange.size = sizeof(unsigned int);
+
 	// Create pipeline layout
 	VkDescriptorSetLayout setLayouts[] = { globalBuffersSetLayout, globalTexturesSetLayout, userTexturesSetLayout };
 
@@ -174,8 +190,8 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 	pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
 	pipelineLayoutInfo.setLayoutCount = 3;
 	pipelineLayoutInfo.pSetLayouts = setLayouts;
-	pipelineLayoutInfo.pushConstantRangeCount = 0;
-	pipelineLayoutInfo.pPushConstantRanges = nullptr;
+	pipelineLayoutInfo.pushConstantRangeCount = 1;
+	pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
 	if (vkCreatePipelineLayout(device, &pipelineLayoutInfo, nullptr, &pipelineLayout) != VK_SUCCESS)
 	{
