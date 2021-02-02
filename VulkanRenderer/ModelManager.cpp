@@ -78,8 +78,15 @@ bool ModelManager::Init(VKRenderer& renderer, VkRenderPass renderPass)
 	return true;
 }
 
-bool ModelManager::AddModel(VKRenderer& renderer, const std::string& path, const std::string& texturePath)
+bool ModelManager::AddModel(VKRenderer& renderer, Entity e, const std::string& path, const std::string& texturePath)
 {
+	// Return the model and don't add a new entry if this entity already has a model
+	if (map.find(e.id) != map.end())
+	{
+		//return GetModel(e);
+		return true;
+	}
+
 	VKBase& base = renderer.GetBase();
 
 	RenderModel renderModel = {};
@@ -121,7 +128,11 @@ bool ModelManager::AddModel(VKRenderer& renderer, const std::string& path, const
 
 	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
 
-	models.push_back(renderModel);
+	ModelInstance mi = {};
+	mi.e = e;
+	mi.renderModel = renderModel;
+
+	InsertModelInstance(mi);
 
 	return true;
 }
@@ -142,13 +153,13 @@ void ModelManager::Render(VkCommandBuffer cmdBuffer, VkPipelineLayout pipelineLa
 
 	for (size_t i = 0; i < models.size(); i++)
 	{
-		const Model& m = models[i].model;
+		const Model& m = models[i].renderModel.model;
 
 		vertexBuffers[0] = m.GetVertexBuffer().GetBuffer();
 		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
 		vkCmdBindIndexBuffer(cmdBuffer, m.GetIndexBuffer().GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
 		vkCmdPushConstants(cmdBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(unsigned int), &instanceDataOffset);
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &models[i].set, 0, nullptr);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &models[i].renderModel.set, 0, nullptr);
 		vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(m.GetIndexCount()), 1, 0, 0, 0);
 
 		instanceDataOffset += 1;
@@ -161,10 +172,21 @@ void ModelManager::Dispose(VkDevice device)
 {
 	for (size_t i = 0; i < models.size(); i++)
 	{
-		models[i].model.Dispose(device);
-		models[i].texture.Dispose(device);
+		models[i].renderModel.model.Dispose(device);
+		models[i].renderModel.texture.Dispose(device);
 	}
 
 	shader.Dispose(device);
 	pipeline.Dispose(device);
+}
+
+const RenderModel& ModelManager::GetRenderModel(Entity e) const
+{
+	return models[map.at(e.id)].renderModel;
+}
+
+void ModelManager::InsertModelInstance(const ModelInstance& mi)
+{
+	models.push_back(mi);
+	map[mi.e.id] = models.size() - 1;
 }

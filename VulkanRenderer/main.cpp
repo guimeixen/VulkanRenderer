@@ -2,9 +2,7 @@
 #include "Input.h"
 #include "Random.h"
 #include "Camera.h"
-#include "VKRenderer.h"
 #include "VertexTypes.h"
-#include "VKFramebuffer.h"
 #include "ParticleManager.h"
 #include "ModelManager.h"
 #include "Skybox.h"
@@ -12,6 +10,8 @@
 #include "EntityManager.h"
 #include "TransformManager.h"
 #include "Allocator.h"
+#include "MeshDefaults.h"
+#include "Material.h"
 
 #include "glm/gtc/matrix_transform.hpp"
 
@@ -36,11 +36,6 @@ int main()
 	EntityManager entityManager;
 	TransformManager transformManager;
 	transformManager.Init(&allocator, 10);
-
-	Entity e[2] = { entityManager.Create(), entityManager.Create() };
-	transformManager.AddTransform(e[0]);
-	transformManager.AddTransform(e[1]);
-
 
 	VKRenderer renderer;
 	if (!renderer.Init(window.GetHandle(), width, height))
@@ -97,8 +92,15 @@ int main()
 	}
 
 	
-	modelManager.AddModel(renderer, "Data/Models/trash_can.obj", "Data/Models/trash_can_d.jpg");
-	modelManager.AddModel(renderer, "Data/Models/floor.obj", "Data/Models/floor.jpg");
+	Entity trashCanEntity = entityManager.Create();
+	Entity floorEntity = entityManager.Create();
+	transformManager.AddTransform(trashCanEntity);
+	transformManager.AddTransform(floorEntity);
+
+	transformManager.SetLocalPosition(trashCanEntity, glm::vec3(0.0f, 0.5f, 0.0f));
+
+	modelManager.AddModel(renderer, trashCanEntity, "Data/Models/trash_can.obj", "Data/Models/trash_can_d.jpg");
+	modelManager.AddModel(renderer, floorEntity, "Data/Models/floor.obj", "Data/Models/floor.jpg");
 
 	std::vector<std::string> faces(6);
 	faces[0] = "Data/Textures/left.png";
@@ -124,7 +126,6 @@ int main()
 		std::cout << "Failed to add particle system\n";
 		return 1;
 	}
-
 
 	TextureParams storageTexParams = {};
 	storageTexParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
@@ -172,55 +173,22 @@ int main()
 	renderer.UpdateGlobalTexturesSet(imageInfo2, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
 
-
-	PipelineInfo pipeInfo = VKPipeline::DefaultFillStructs();
-
-	VkRect2D scissor = {};
-	scissor.offset = { 0, 0 };
-	scissor.extent = surfaceExtent;
-
-	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
-	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorBlendAttachment.blendEnable = VK_FALSE;
-
-	VkDynamicState dynamicStates[] = {
-		VK_DYNAMIC_STATE_VIEWPORT,
-	};
-
-
-	// No need to set the viewport because it's dynamic
-	pipeInfo.viewportState.viewportCount = 1;
-	pipeInfo.viewportState.scissorCount = 1;
-	pipeInfo.viewportState.pScissors = &scissor;
-
-	pipeInfo.colorBlending.attachmentCount = 1;
-	pipeInfo.colorBlending.pAttachments = &colorBlendAttachment;
-
-	pipeInfo.dynamicState.dynamicStateCount = 1;
-	pipeInfo.dynamicState.pDynamicStates = dynamicStates;
-
 	// OFFSCREEN
 
-	// Post quad is rendered with no buffers
-	pipeInfo.vertexInput.vertexBindingDescriptionCount = 0;
-	pipeInfo.vertexInput.pVertexBindingDescriptions = nullptr;
-	pipeInfo.vertexInput.vertexAttributeDescriptionCount = 0;
-	pipeInfo.vertexInput.pVertexAttributeDescriptions = nullptr;
+	MaterialFeatures postQuadMatFeatures = {};
+	postQuadMatFeatures.cullMode = VK_CULL_MODE_FRONT_BIT;
+	postQuadMatFeatures.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	postQuadMatFeatures.enableDepthWrite = VK_TRUE;
 
-	pipeInfo.rasterizer.cullMode = VK_CULL_MODE_FRONT_BIT;
-	pipeInfo.rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-
-	// Change it back to LESS from the skybox pipeline
-	pipeInfo.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS;
-
-	VKShader postQuadShader;
-	postQuadShader.LoadShader(device, "Data/Shaders/post_quad_vert.spv", "Data/Shaders/post_quad_frag.spv");
-
-	VKPipeline postQuadPipeline;
-	if(!postQuadPipeline.Create(device, pipeInfo, renderer.GetPipelineLayout(), postQuadShader, renderer.GetDefaultRenderPass()))
-		return 1;
+	// Empty mesh to render the quad with no buffers
+	Mesh postQuadMesh = {};
+	postQuadMesh.vertexCount = 3;
+	Material postQuadMat;
+	postQuadMat.Create(renderer, postQuadMesh, postQuadMatFeatures, "Data/Shaders/post_quad_vert.spv", "Data/Shaders/post_quad_frag.spv", renderer.GetDefaultRenderPass());
 
 	// SHADOW MAPPING
+
+	Mesh shadowMesh = {};
 
 	VkVertexInputBindingDescription bindingDesc = {};
 	bindingDesc = {};
@@ -244,21 +212,17 @@ int main()
 	attribDesc[2].location = 2;
 	attribDesc[2].offset = offsetof(Vertex, normal);
 
-	pipeInfo.vertexInput.vertexBindingDescriptionCount = 1;
-	pipeInfo.vertexInput.pVertexBindingDescriptions = &bindingDesc;
-	pipeInfo.vertexInput.vertexAttributeDescriptionCount = 3;
-	pipeInfo.vertexInput.pVertexAttributeDescriptions = attribDesc;
+	shadowMesh.bindings.push_back(bindingDesc);
+	shadowMesh.attribs.push_back(attribDesc[0]);
+	shadowMesh.attribs.push_back(attribDesc[1]);
+	shadowMesh.attribs.push_back(attribDesc[2]);
 
-	
-	pipeInfo.rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-	pipeInfo.rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-
-	VKShader shadowShader;
-	shadowShader.LoadShader(device, "Data/Shaders/shadow_vert.spv", "Data/Shaders/shadow_frag.spv");
-
-	VKPipeline shadowPipeline;
-	if(!shadowPipeline.Create(device, pipeInfo, renderer.GetPipelineLayout(), shadowShader, shadowFB.GetRenderPass()))
-		return 1;
+	MaterialFeatures shadowMatFeatures = {};
+	shadowMatFeatures.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	shadowMatFeatures.cullMode = VK_CULL_MODE_BACK_BIT;
+	shadowMatFeatures.enableDepthWrite = VK_TRUE;
+	Material shadowMat;
+	shadowMat.Create(renderer, shadowMesh, shadowMatFeatures, "Data/Shaders/shadow_vert.spv", "Data/Shaders/shadow_frag.spv", shadowFB.GetRenderPass());
 
 
 	VkDescriptorSet quadSet = renderer.AllocateUserTextureDescriptorSet();
@@ -317,7 +281,7 @@ int main()
 	VkDescriptorImageInfo compImgInfo = {};
 	compImgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
 	compImgInfo.imageView = storageTexture.GetImageView();
-	//compImgInfo.sampler = ;
+	compImgInfo.sampler = storageTexture.GetSampler();
 
 	VkWriteDescriptorSet computeWrite = {};
 	computeWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
@@ -501,76 +465,24 @@ int main()
 	
 
 	// Create quad to display the image create by the compute shader
+	MaterialFeatures quadMatFeatures = {};
+	quadMatFeatures.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+	quadMatFeatures.cullMode = VK_CULL_MODE_BACK_BIT;
+	quadMatFeatures.enableDepthWrite = VK_TRUE;
 
-	glm::vec4 quadVertices[] = {
-		glm::vec4(-1.0f, -1.0f, 0.0f, 0.0f),
-		glm::vec4(-1.0f, 1.0f,	0.0f, 1.0f),
-		glm::vec4(1.0f, -1.0f,	1.0f, 0.0f),
-		
-		glm::vec4(1.0f, -1.0f,	1.0f, 0.0f),
-		glm::vec4(-1.0f, 1.0f,	0.0f, 1.0f),
-		glm::vec4(1.0f, 1.0f, 1.0f, 1.0f)
-	};
-
-	VKBuffer quadVertexStagingBuffer;
-	quadVertexStagingBuffer.Create(&base, sizeof(quadVertices), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-	unsigned int vertexSize = quadVertexStagingBuffer.GetSize();
-
-	void* mapped = quadVertexStagingBuffer.Map(device, 0, vertexSize);
-	memcpy(mapped, quadVertices, (size_t)vertexSize);
-	quadVertexStagingBuffer.Unmap(device);
-
-	VKBuffer quadVb;
-	quadVb.Create(&base, sizeof(quadVertices), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-	base.CopyBuffer(quadVertexStagingBuffer, quadVb, vertexSize);
-	quadVertexStagingBuffer.Dispose(device);
+	Mesh quadMesh = MeshDefaults::CreateQuad(renderer);
+	Material quadMat;
+	quadMat.Create(renderer, quadMesh, quadMatFeatures, "Data/Shaders/quad_vert.spv", "Data/Shaders/quad_frag.spv", offscreenFB.GetRenderPass());
 
 	VkDescriptorSet quadStorageSet;
-
-	VkVertexInputBindingDescription quadBindingDesc = {};
-	quadBindingDesc.binding = 0;
-	quadBindingDesc.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-	quadBindingDesc.stride = sizeof(glm::vec4);
-
-	VkVertexInputAttributeDescription quadAttribDesc = {};
-	quadAttribDesc.binding = 0;
-	quadAttribDesc.format = VK_FORMAT_R32G32B32A32_SFLOAT;
-	quadAttribDesc.location = 0;
-	quadAttribDesc.offset = 0;
-
-	pipeInfo.depthStencilState.depthWriteEnable = VK_TRUE;
-
-	colorBlendAttachment = {};
-	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-	colorBlendAttachment.blendEnable = VK_FALSE;
-
-	pipeInfo.vertexInput.vertexBindingDescriptionCount = 1;
-	pipeInfo.vertexInput.pVertexBindingDescriptions = &quadBindingDesc;
-	pipeInfo.vertexInput.vertexAttributeDescriptionCount = 1;
-	pipeInfo.vertexInput.pVertexAttributeDescriptions = &quadAttribDesc;
-
-	pipeInfo.colorBlending.attachmentCount = 1;
-	pipeInfo.colorBlending.pAttachments = &colorBlendAttachment;
-
-	VKShader quadStorageShader;
-	quadStorageShader.LoadShader(device, "Data/Shaders/quad_Vert.spv", "Data/Shaders/quad_frag.spv");
-
-	VKPipeline quadStoragePipeline;
-	if (!quadStoragePipeline.Create(device, pipeInfo, renderer.GetPipelineLayout(), quadStorageShader, offscreenFB.GetRenderPass()))
-		return 1;
-
 
 
 	// Create mipmaps
 
 	VkCommandBuffer cmdBuffer = renderer.CreateGraphicsCommandBuffer(true);
 
-	const std::vector<RenderModel>& models = modelManager.GetRenderModels();
-
-	for (size_t i = 0; i < models.size(); i++)
-	{
-		renderer.CreateMipMaps(cmdBuffer, models[i].texture);
-	}
+	renderer.CreateMipMaps(cmdBuffer, modelManager.GetRenderModel(trashCanEntity).texture);
+	renderer.CreateMipMaps(cmdBuffer, modelManager.GetRenderModel(floorEntity).texture);
 
 	const std::vector<ParticleSystem>& particleSystems = particleManager.GetParticlesystems();
 
@@ -702,7 +614,7 @@ int main()
 		depthClearValue.depthStencil = { 1.0f, 0 };
 
 		renderer.BeginRenderPass(cmdBuffer, shadowFB, 1, &depthClearValue);
-		modelManager.Render(cmdBuffer, pipelineLayout, shadowPipeline.GetPipeline());
+		modelManager.Render(cmdBuffer, pipelineLayout, shadowMat.GetPipeline());
 		vkCmdEndRenderPass(cmdBuffer);
 
 		// OFFSCREEN
@@ -759,9 +671,9 @@ int main()
 		VkBuffer vertexBuffers[] = { VK_NULL_HANDLE };
 		VkDeviceSize offsets[] = { 0 };
 
-		vertexBuffers[0] = quadVb.GetBuffer();
+		vertexBuffers[0] = quadMesh.vb.GetBuffer();
 		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
-		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, quadStoragePipeline.GetPipeline());
+		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, quadMat.GetPipeline());
 		vkCmdDraw(cmdBuffer, 6, 1, 0, 0);
 
 		
@@ -797,9 +709,9 @@ int main()
 		// Normal pass
 		renderer.BeginDefaultRenderPass();
 
-		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, postQuadPipeline.GetPipeline());
+		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, postQuadMat.GetPipeline());
 		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &quadSet, 0, nullptr);
-		vkCmdDraw(cmdBuffer, 3, 1, 0, 0);
+		vkCmdDraw(cmdBuffer, (uint32_t)postQuadMesh.vertexCount, 1, 0, 0);
 
 		renderer.EndDefaultRenderPass();
 		renderer.EndCmdRecording();
@@ -811,16 +723,16 @@ int main()
 		memcpy(mapped, camerasData, static_cast<size_t>(currentCamera + 1) * alignSingleUBOSize);
 		cameraUBO.Unmap(device);
 
-		//transformManager.setlo
-		transformManager.SetLocalPosition(e[0], glm::vec3(0.0f, 0.0f, 8.0f));
 
 		// Update model matrices
+		const std::vector<ModelInstance>& modelInstances = modelManager.GetModelInstances();
+
 		mapped = instanceDataBuffer.Map(device, 0, VK_WHOLE_SIZE);
 		size_t offset = 0;
-		for (size_t i = 0; i < modelManager.GetRenderModels().size(); i++)
+		for (unsigned int i = 0; i < modelManager.GetNumModels(); i++)
 		{
 			void* ptr = (char*)mapped + offset;
-			memcpy(ptr, &transformManager.GetLocalToWorld(e[i]), sizeof(glm::mat4));
+			memcpy(ptr, &transformManager.GetLocalToWorld(modelInstances[i].e), sizeof(glm::mat4));
 			offset += sizeof(glm::mat4);
 		}
 
@@ -861,15 +773,13 @@ int main()
 	if (camerasData)
 		free(camerasData);
 
-	quadStoragePipeline.Dispose(device);
-	quadStorageShader.Dispose(device);
-	quadVb.Dispose(device);
+	quadMat.Dispose(device);
+	quadMesh.vb.Dispose(device);
 
 	cameraUBO.Dispose(device);
 	offscreenFB.Dispose(device);
 	shadowFB.Dispose(device);
 	instanceDataBuffer.Dispose(device);
-
 
 	vkDestroyFence(device, computeFence, nullptr);
 	storageTexture.Dispose(device);
@@ -884,10 +794,8 @@ int main()
 	particleManager.Dispose(device);
 	skybox.Dispose(device);
 	
-	postQuadShader.Dispose(device);
-	shadowShader.Dispose(device);
-	postQuadPipeline.Dispose(device);
-	shadowPipeline.Dispose(device);
+	postQuadMat.Dispose(device);
+	shadowMat.Dispose(device);
 
 	transformManager.Dispose();
 	renderer.Dispose();
