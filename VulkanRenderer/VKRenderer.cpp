@@ -505,6 +505,25 @@ void VKRenderer::UpdateGlobalTexturesSet(const VkDescriptorImageInfo& info, uint
 	vkUpdateDescriptorSets(base.GetDevice(), 1, &write, 0, nullptr);
 }
 
+void VKRenderer::UpdateUserTextureSet(VkDescriptorSet set, const VKTexture2D& texture, unsigned int binding)
+{
+	VkDescriptorImageInfo imageInfo = {};
+	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	imageInfo.imageView = texture.GetImageView();
+	imageInfo.sampler = texture.GetSampler();
+
+	VkWriteDescriptorSet descriptorWrites = {};
+	descriptorWrites.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrites.dstBinding = (uint32_t)binding;
+	descriptorWrites.dstArrayElement = 0;
+	descriptorWrites.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	descriptorWrites.descriptorCount = 1;
+	descriptorWrites.dstSet = set;
+	descriptorWrites.pImageInfo = &imageInfo;
+
+	vkUpdateDescriptorSets(base.GetDevice(), 1, &descriptorWrites, 0, nullptr);
+}
+
 VkCommandBuffer VKRenderer::CreateGraphicsCommandBuffer(bool beginRecord)
 {
 	VkCommandBufferAllocateInfo allocInfo = {};

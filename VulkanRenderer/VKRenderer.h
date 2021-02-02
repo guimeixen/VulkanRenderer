@@ -21,6 +21,7 @@ public:
 	VkDescriptorSet AllocateSetFromLayout(VkDescriptorSetLayout layout);
 	void UpdateGlobalBuffersSet(const VkDescriptorBufferInfo& info, uint32_t binding, VkDescriptorType descriptorType);
 	void UpdateGlobalTexturesSet(const VkDescriptorImageInfo& info, uint32_t binding, VkDescriptorType descriptorType);
+	void UpdateUserTextureSet(VkDescriptorSet set, const VKTexture2D& texture, unsigned int binding);
 
 	VkCommandBuffer CreateGraphicsCommandBuffer(bool beginRecord);
 	VkCommandBuffer CreateComputeCommandBuffer(bool beginRecord);

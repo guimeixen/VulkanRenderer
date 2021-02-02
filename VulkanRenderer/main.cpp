@@ -226,57 +226,13 @@ int main()
 
 
 	VkDescriptorSet quadSet = renderer.AllocateUserTextureDescriptorSet();
-	
-	imageInfo2.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-	imageInfo2.imageView = offscreenFB.GetFirstColorTexture().GetImageView();
-	imageInfo2.sampler = offscreenFB.GetFirstColorTexture().GetSampler();
-
-	VkWriteDescriptorSet descriptorWrites = {};
-	descriptorWrites.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-	descriptorWrites.dstBinding = 0;
-	descriptorWrites.dstArrayElement = 0;
-	descriptorWrites.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	descriptorWrites.descriptorCount = 1;
-	descriptorWrites.dstSet = quadSet;
-	descriptorWrites.pImageInfo = &imageInfo2;
-
-	vkUpdateDescriptorSets(device, 1, &descriptorWrites, 0, nullptr);
+	renderer.UpdateUserTextureSet(quadSet, offscreenFB.GetFirstColorTexture(), 0);
 
 	// Compute
-
-	VkDescriptorSetLayoutBinding computeSetLayoutBinding = {};
-	computeSetLayoutBinding.binding = 0;
-	computeSetLayoutBinding.descriptorCount = 1;
-	computeSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-	computeSetLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-	VkDescriptorSetLayoutCreateInfo computeSetLayoutInfo = {};
-	computeSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	computeSetLayoutInfo.bindingCount = 1;
-	computeSetLayoutInfo.pBindings = &computeSetLayoutBinding;
-
-	VkDescriptorSetLayout computeSetLayout;
-
-	if (vkCreateDescriptorSetLayout(device, &computeSetLayoutInfo, nullptr, &computeSetLayout) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create descriptor set layout\n";
-		return 1;
-	}	
-
-	VkPipelineLayoutCreateInfo computePipeLayoutInfo = {};
-	computePipeLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	computePipeLayoutInfo.setLayoutCount = 1;
-	computePipeLayoutInfo.pSetLayouts = &computeSetLayout;
-
-	VkPipelineLayout computePipelineLayout;
-
-	if (vkCreatePipelineLayout(device, &computePipeLayoutInfo, nullptr, &computePipelineLayout) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create pipeline layout\n";
-		return 1;
-	}
-
-	VkDescriptorSet computeSet = renderer.AllocateSetFromLayout(computeSetLayout);
+	Material computeMat;
+	computeMat.Create(renderer, "Data/Shaders/compute.spv");
+	
+	VkDescriptorSet computeSet = renderer.AllocateSetFromLayout(computeMat.GetComputeSetLayout());
 
 	VkDescriptorImageInfo compImgInfo = {};
 	compImgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -295,27 +251,7 @@ int main()
 	vkUpdateDescriptorSets(device, 1, &computeWrite, 0, nullptr);
 
 
-	VKShader computeShader;
-	if (!computeShader.LoadShader(device, "Data/Shaders/compute.spv"))
-	{
-		std::cout << "Failed to create compute shader\n";
-		return 1;
-	}
 
-	VkPipelineShaderStageCreateInfo computeStageInfo = computeShader.GetComputeStageInfo();
-
-	VkComputePipelineCreateInfo computePipeInfo = {};
-	computePipeInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-	computePipeInfo.layout = computePipelineLayout;
-	computePipeInfo.stage = computeStageInfo;
-
-	VkPipeline computePipeline;
-
-	if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &computePipeInfo, nullptr, &computePipeline) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create compute pipeline\n";
-		return 1;
-	}
 	
 	// Semaphore for compute and graphics sync
 	VkSemaphoreCreateInfo semaphoreInfo = {};
@@ -392,8 +328,8 @@ int main()
 		vkCmdPipelineBarrier(computeCmdBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &acquireBarrier);
 	}
 
-	vkCmdBindPipeline(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipeline);
-	vkCmdBindDescriptorSets(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computePipelineLayout, 0, 1, &computeSet, 0, nullptr);
+	vkCmdBindPipeline(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computeMat.GetComputePipeline());
+	vkCmdBindDescriptorSets(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computeMat.GetComputePipelineLayout(), 0, 1, &computeSet, 0, nullptr);
 	vkCmdDispatch(computeCmdBuffer, 256 / 16, 256 / 16, 1);
 
 	if (indices.graphicsFamilyIndex != indices.computeFamilyIndex)
@@ -473,9 +409,6 @@ int main()
 	Mesh quadMesh = MeshDefaults::CreateQuad(renderer);
 	Material quadMat;
 	quadMat.Create(renderer, quadMesh, quadMatFeatures, "Data/Shaders/quad_vert.spv", "Data/Shaders/quad_frag.spv", offscreenFB.GetRenderPass());
-
-	VkDescriptorSet quadStorageSet;
-
 
 	// Create mipmaps
 
@@ -775,6 +708,7 @@ int main()
 
 	quadMat.Dispose(device);
 	quadMesh.vb.Dispose(device);
+	computeMat.Dispose(device);
 
 	cameraUBO.Dispose(device);
 	offscreenFB.Dispose(device);
@@ -783,10 +717,6 @@ int main()
 
 	vkDestroyFence(device, computeFence, nullptr);
 	storageTexture.Dispose(device);
-	vkDestroyPipeline(device, computePipeline, nullptr);
-	vkDestroyPipelineLayout(device, computePipelineLayout, nullptr);
-	vkDestroyDescriptorSetLayout(device, computeSetLayout, nullptr);
-	computeShader.Dispose(device);
 	vkDestroySemaphore(device, computeSemaphore, nullptr);
 	vkDestroySemaphore(device, graphicsSemaphore, nullptr);
 	
