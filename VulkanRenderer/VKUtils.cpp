@@ -165,8 +165,6 @@ namespace vkutils
 
 		VkBool32 presentSupport = false;
 
-		// TODO: Check if graphics and present queue family is the same and prefer it
-
 		for (size_t i = 0; i < queueFamilies.size(); i++)
 		{
 			std::cout << "Family " << i << " has " << queueFamilies[i].queueCount << " queues "<< "that support ";

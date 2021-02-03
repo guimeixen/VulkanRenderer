@@ -12,6 +12,7 @@
 #include "Allocator.h"
 #include "MeshDefaults.h"
 #include "Material.h"
+#include "ComputeMaterial.h"
 
 #include "glm/gtc/matrix_transform.hpp"
 
@@ -229,10 +230,10 @@ int main()
 	renderer.UpdateUserTextureSet(quadSet, offscreenFB.GetFirstColorTexture(), 0);
 
 	// Compute
-	Material computeMat;
+	ComputeMaterial computeMat;
 	computeMat.Create(renderer, "Data/Shaders/compute.spv");
 	
-	VkDescriptorSet computeSet = renderer.AllocateSetFromLayout(computeMat.GetComputeSetLayout());
+	VkDescriptorSet computeSet = renderer.AllocateSetFromLayout(computeMat.GetSetLayout());
 
 	VkDescriptorImageInfo compImgInfo = {};
 	compImgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -249,8 +250,6 @@ int main()
 	computeWrite.pImageInfo = &compImgInfo;
 
 	vkUpdateDescriptorSets(device, 1, &computeWrite, 0, nullptr);
-
-
 
 	
 	// Semaphore for compute and graphics sync
@@ -328,8 +327,8 @@ int main()
 		vkCmdPipelineBarrier(computeCmdBuffer, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, VK_PIPELINE_STAGE_COMPUTE_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &acquireBarrier);
 	}
 
-	vkCmdBindPipeline(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computeMat.GetComputePipeline());
-	vkCmdBindDescriptorSets(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computeMat.GetComputePipelineLayout(), 0, 1, &computeSet, 0, nullptr);
+	vkCmdBindPipeline(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computeMat.GetPipeline());
+	vkCmdBindDescriptorSets(computeCmdBuffer, VK_PIPELINE_BIND_POINT_COMPUTE, computeMat.GetPipelineLayout(), 0, 1, &computeSet, 0, nullptr);
 	vkCmdDispatch(computeCmdBuffer, 256 / 16, 256 / 16, 1);
 
 	if (indices.graphicsFamilyIndex != indices.computeFamilyIndex)

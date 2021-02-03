@@ -1,7 +1,5 @@
 #include "Material.h"
 
-#include <iostream>
-
 Material::Material()
 {
 }
@@ -52,60 +50,6 @@ bool Material::Create(VKRenderer& renderer, const Mesh &mesh, const MaterialFeat
 
 	if (!pipeline.Create(device, pipeInfo, renderer.GetPipelineLayout(), shader, renderPass))
 		return 1;
-
-	return true;
-}
-
-bool Material::Create(VKRenderer& renderer, const std::string& computePath)
-{
-	VkDevice device = renderer.GetBase().GetDevice();
-
-	VkDescriptorSetLayoutBinding computeSetLayoutBinding = {};
-	computeSetLayoutBinding.binding = 0;
-	computeSetLayoutBinding.descriptorCount = 1;
-	computeSetLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-	computeSetLayoutBinding.stageFlags = VK_SHADER_STAGE_COMPUTE_BIT;
-
-	VkDescriptorSetLayoutCreateInfo computeSetLayoutInfo = {};
-	computeSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	computeSetLayoutInfo.bindingCount = 1;
-	computeSetLayoutInfo.pBindings = &computeSetLayoutBinding;
-
-	if (vkCreateDescriptorSetLayout(device, &computeSetLayoutInfo, nullptr, &computeSetLayout) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create descriptor set layout\n";
-		return 1;
-	}
-
-	VkPipelineLayoutCreateInfo computePipeLayoutInfo = {};
-	computePipeLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-	computePipeLayoutInfo.setLayoutCount = 1;
-	computePipeLayoutInfo.pSetLayouts = &computeSetLayout;
-
-	if (vkCreatePipelineLayout(device, &computePipeLayoutInfo, nullptr, &computePipelineLayout) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create pipeline layout\n";
-		return 1;
-	}
-
-	if (!shader.LoadShader(device, "Data/Shaders/compute.spv"))
-	{
-		std::cout << "Failed to create compute shader\n";
-		return 1;
-	}
-
-	VkPipelineShaderStageCreateInfo computeStageInfo = shader.GetComputeStageInfo();
-
-	VkComputePipelineCreateInfo computePipeInfo = {};
-	computePipeInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-	computePipeInfo.layout = computePipelineLayout;
-	computePipeInfo.stage = computeStageInfo;
-
-	if (vkCreateComputePipelines(device, VK_NULL_HANDLE, 1, &computePipeInfo, nullptr, &comPipeline) != VK_SUCCESS)
-	{
-		std::cout << "Failed to create compute pipeline\n";
-		return 1;
-	}
 
 	return true;
 }

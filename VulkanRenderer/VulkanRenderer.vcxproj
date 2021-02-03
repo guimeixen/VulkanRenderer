@@ -148,6 +148,7 @@
   <ItemGroup>
     <ClCompile Include="Allocator.cpp" />
     <ClCompile Include="Camera.cpp" />
+    <ClCompile Include="ComputeMaterial.cpp" />
     <ClCompile Include="EntityManager.cpp" />
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="Log.cpp" />
@@ -176,6 +177,7 @@
   <ItemGroup>
     <ClInclude Include="Allocator.h" />
     <ClInclude Include="Camera.h" />
+    <ClInclude Include="ComputeMaterial.h" />
     <ClInclude Include="EntityManager.h" />
     <ClInclude Include="Input.h" />
     <ClInclude Include="Log.h" />
