@@ -28,8 +28,8 @@ class ModelManager
 public:
 	ModelManager();
 
-	bool Init(VKRenderer &renderer, VkRenderPass renderPass);
-	bool AddModel(VKRenderer& renderer, Entity e, const std::string &path, const std::string &texturePath);
+	bool Init(VKRenderer* renderer, VkRenderPass renderPass);
+	bool AddModel(VKRenderer* renderer, Entity e, const std::string &path, const std::string &texturePath);
 	void Render(VkCommandBuffer cmdBuffer, VkPipelineLayout pipelineLayout, VkPipeline shadowMapPipeline);
 	void Dispose(VkDevice device);
 

@@ -2,7 +2,7 @@
 
 #include "VertexTypes.h"
 
-Mesh MeshDefaults::CreateQuad(VKRenderer& renderer)
+Mesh MeshDefaults::CreateQuad(VKRenderer* renderer)
 {
 	Mesh m = {};
 	
@@ -31,8 +31,8 @@ Mesh MeshDefaults::CreateQuad(VKRenderer& renderer)
 		glm::vec4(1.0f, 1.0f, 1.0f, 1.0f)
 	};
 
-	VKBase& base = renderer.GetBase();
-	VkDevice device = renderer.GetBase().GetDevice();
+	VKBase& base = renderer->GetBase();
+	VkDevice device = renderer->GetBase().GetDevice();
 
 	VKBuffer quadVertexStagingBuffer;
 	quadVertexStagingBuffer.Create(&base, sizeof(quadVertices), VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);

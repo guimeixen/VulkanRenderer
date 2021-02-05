@@ -5,6 +5,6 @@
 
 namespace MeshDefaults
 {
-	Mesh CreateQuad(VKRenderer& renderer);
+	Mesh CreateQuad(VKRenderer* renderer);
 }
 

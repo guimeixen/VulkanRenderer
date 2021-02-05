@@ -11,5 +11,5 @@ layout(push_constant) uniform PushConsts
 
 void main()
 {
-    gl_Position = ubo.proj * ubo.view * GetModelMatrix(startIndex) * vec4(inPos, 1.0);
+    gl_Position = projView * GetModelMatrix(startIndex) * vec4(inPos, 1.0);
 }

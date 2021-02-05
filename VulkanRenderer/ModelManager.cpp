@@ -8,7 +8,7 @@ ModelManager::ModelManager()
 	instanceDataOffset = 0;
 }
 
-bool ModelManager::Init(VKRenderer& renderer, VkRenderPass renderPass)
+bool ModelManager::Init(VKRenderer* renderer, VkRenderPass renderPass)
 {
 	// Create the pipeline
 
@@ -34,7 +34,7 @@ bool ModelManager::Init(VKRenderer& renderer, VkRenderPass renderPass)
 	attribDesc[2].offset = offsetof(Vertex, normal);
 
 
-	VKBase& base = renderer.GetBase();
+	VKBase& base = renderer->GetBase();
 
 	PipelineInfo pipeInfo = VKPipeline::DefaultFillStructs();
 
@@ -69,7 +69,7 @@ bool ModelManager::Init(VKRenderer& renderer, VkRenderPass renderPass)
 
 	shader.LoadShader(base.GetDevice(), "Data/Shaders/shader_vert.spv", "Data/Shaders/shader_frag.spv");
 
-	if (!pipeline.Create(base.GetDevice(), pipeInfo, renderer.GetPipelineLayout(), shader, renderPass))
+	if (!pipeline.Create(base.GetDevice(), pipeInfo, renderer->GetPipelineLayout(), shader, renderPass))
 	{
 		std::cout << "Failed to create model pipeline\n";
 		return false;
@@ -78,7 +78,7 @@ bool ModelManager::Init(VKRenderer& renderer, VkRenderPass renderPass)
 	return true;
 }
 
-bool ModelManager::AddModel(VKRenderer& renderer, Entity e, const std::string& path, const std::string& texturePath)
+bool ModelManager::AddModel(VKRenderer* renderer, Entity e, const std::string& path, const std::string& texturePath)
 {
 	// Return the model and don't add a new entry if this entity already has a model
 	if (map.find(e.id) != map.end())
@@ -87,7 +87,7 @@ bool ModelManager::AddModel(VKRenderer& renderer, Entity e, const std::string& p
 		return true;
 	}
 
-	VKBase& base = renderer.GetBase();
+	VKBase& base = renderer->GetBase();
 
 	RenderModel renderModel = {};
 
@@ -110,7 +110,7 @@ bool ModelManager::AddModel(VKRenderer& renderer, Entity e, const std::string& p
 
 	VkDevice device = base.GetDevice();
 
-	renderModel.set = renderer.AllocateUserTextureDescriptorSet();
+	renderModel.set = renderer->AllocateUserTextureDescriptorSet();
 
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

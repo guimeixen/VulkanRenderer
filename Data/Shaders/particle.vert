@@ -15,7 +15,7 @@ void main()
 	mat4 modelMatrix = mat4(1.0);										// Constructor set all values in the diagonal to 1 (identity)
 	modelMatrix[3].xyzw = vec4(inst_Pos.xyz, 1.0);
 	
-	mat4 modelView = ubo.view * modelMatrix;
+	mat4 modelView = viewMatrix * modelMatrix;
 	
 	modelView[0][0] = 0.5; 
 	modelView[0][1] = 0.0;
@@ -33,5 +33,5 @@ void main()
 	
 	uv = inPosUv.zw;
 	
-    gl_Position = ubo.proj * modelView * vec4(inPosUv.xy, 0.0, 1.0);
+    gl_Position = projectionMatrix * modelView * vec4(inPosUv.xy, 0.0, 1.0);
 }

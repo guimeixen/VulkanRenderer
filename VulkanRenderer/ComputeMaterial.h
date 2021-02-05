@@ -8,7 +8,7 @@ class ComputeMaterial
 public:
 	ComputeMaterial();
 
-	bool Create(VKRenderer& renderer, const std::string& computePath);
+	bool Create(VKRenderer* renderer, const std::string& computePath);
 	void Dispose(VkDevice device);
 
 	VkPipeline GetPipeline() const { return pipeline; }

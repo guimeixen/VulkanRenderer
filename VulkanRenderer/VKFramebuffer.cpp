@@ -5,6 +5,8 @@
 
 VKFramebuffer::VKFramebuffer()
 {
+	width = 0;
+	height = 0;
     framebuffer = VK_NULL_HANDLE;
     renderPass = VK_NULL_HANDLE;
 }
@@ -150,7 +152,8 @@ bool VKFramebuffer::Create(const VKBase &base, const FramebufferParams& params, 
 		attachments.push_back(colorTextures[i].GetImageView());
 	}
 
-	attachments.push_back(depthTexture.GetImageView());
+	if (params.createDepthTexture)
+		attachments.push_back(depthTexture.GetImageView());
 
 	VkFramebufferCreateInfo fbInfo = {};
 	fbInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -178,6 +181,8 @@ void VKFramebuffer::Dispose(VkDevice device)
 	}
 	depthTexture.Dispose(device);
 
-	vkDestroyRenderPass(device, renderPass, nullptr);
-	vkDestroyFramebuffer(device, framebuffer, nullptr);
+	if (renderPass != VK_NULL_HANDLE)
+		vkDestroyRenderPass(device, renderPass, nullptr);
+	if (framebuffer != VK_NULL_HANDLE)
+		vkDestroyFramebuffer(device, framebuffer, nullptr);
 }

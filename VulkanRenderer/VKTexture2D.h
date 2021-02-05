@@ -1,20 +1,9 @@
 #pragma once
 
 #include "VKBase.h"
+#include "Texture.h"
 
 #include <string>
-
-enum class TextureType {
-	TEXTURE_2D,
-	TEXTURE_3D,
-	TEXTURE_CUBE
-};
-
-struct TextureParams {
-	VkFormat format;
-	VkSamplerAddressMode addressMode;
-	VkFilter filter;
-};
 
 class VKTexture2D
 {

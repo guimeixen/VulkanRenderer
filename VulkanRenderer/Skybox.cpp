@@ -9,9 +9,9 @@ Skybox::Skybox()
 	set = VK_NULL_HANDLE;
 }
 
-bool Skybox::Load(VKRenderer& renderer, const std::vector<std::string>& facesPath, VkRenderPass renderPass)
+bool Skybox::Load(VKRenderer* renderer, const std::vector<std::string>& facesPath, VkRenderPass renderPass)
 {
-	VKBase& base = renderer.GetBase();
+	VKBase& base = renderer->GetBase();
 
 	TextureParams cubemapParams = {};
 	cubemapParams.format = VK_FORMAT_R8G8B8A8_SRGB;
@@ -22,7 +22,7 @@ bool Skybox::Load(VKRenderer& renderer, const std::vector<std::string>& facesPat
 
 	VkDevice device = base.GetDevice();
 
-	set = renderer.AllocateUserTextureDescriptorSet();
+	set = renderer->AllocateUserTextureDescriptorSet();
 
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -152,7 +152,7 @@ bool Skybox::Load(VKRenderer& renderer, const std::vector<std::string>& facesPat
 
 	shader.LoadShader(device, "Data/Shaders/skybox_vert.spv", "Data/Shaders/skybox_frag.spv");
 
-	if (!pipeline.Create(device, pipeInfo, renderer.GetPipelineLayout(), shader, renderPass))
+	if (!pipeline.Create(device, pipeInfo, renderer->GetPipelineLayout(), shader, renderPass))
 		return false;
 
 	return true;

@@ -10,6 +10,9 @@ public:
 	void Update(float deltaTime, bool doMovement, bool needRightMouse);
 
 	void SetProjectionMatrix(float fov, int windowWidth, int windowHeight, float near, float far);
+	void SetProjectionMatrix(float left, float right, float bottom, float top, float near, float far);
+	void SetViewMatrix(const glm::mat4& view);
+	void SetViewMatrix(const glm::vec3& pos, const glm::vec3& center, const glm::vec3& up);
 	void SetPosition(const glm::vec3& pos);
 	void SetPitch(float pitch);
 	void SetYaw(float yaw);

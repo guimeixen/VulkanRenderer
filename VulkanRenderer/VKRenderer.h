@@ -2,6 +2,8 @@
 
 #include "VKBase.h"
 #include "VKFramebuffer.h"
+#include "Camera.h"
+#include "VKTexture3D.h"
 
 struct GLFWWindow;
 
@@ -21,12 +23,16 @@ public:
 	VkDescriptorSet AllocateSetFromLayout(VkDescriptorSetLayout layout);
 	void UpdateGlobalBuffersSet(const VkDescriptorBufferInfo& info, uint32_t binding, VkDescriptorType descriptorType);
 	void UpdateGlobalTexturesSet(const VkDescriptorImageInfo& info, uint32_t binding, VkDescriptorType descriptorType);
-	void UpdateUserTextureSet(VkDescriptorSet set, const VKTexture2D& texture, unsigned int binding);
+	void UpdateUserTextureSet2D(VkDescriptorSet set, const VKTexture2D& texture, unsigned int binding);
+	void UpdateUserTextureSet3D(VkDescriptorSet set, const VKTexture3D& texture, unsigned int binding);
 
 	VkCommandBuffer CreateGraphicsCommandBuffer(bool beginRecord);
 	VkCommandBuffer CreateComputeCommandBuffer(bool beginRecord);
 	void FreeGraphicsCommandBuffer(VkCommandBuffer cmdBuffer);
 	void FreeComputeCommandBuffer(VkCommandBuffer cmdBuffer);
+
+	void SetCamera(const Camera &camera);
+	void UpdateCameraUBO();
 
 	void BeginCmdRecording();
 	void BeginDefaultRenderPass();
@@ -48,12 +54,16 @@ public:
 	VkDescriptorSet GetGlobalBuffersSet() const { return globalBuffersSet; }
 	VkDescriptorSet GetGlobalTexturesSet() const { return globalTexturesSet; }
 
+	unsigned int GetWidth() const { return width; }
+	unsigned int GetHeight() const { return height; }
+
 private:
 	bool CreateRenderPass(const VKBase& base, VkRenderPass& renderPass, VkFormat depthFormat);
 	bool CreateFramebuffers(const VKBase& base, VkRenderPass renderPass, std::vector<VkFramebuffer>& framebuffers, VkImageView depthImageView);
 
 private:
 	const int MAX_FRAMES_IN_FLIGHT = 2;
+	const unsigned int MAX_CAMERAS = 3;
 	unsigned int currentFrame;
 	unsigned int width;
 	unsigned int height;
@@ -76,5 +86,10 @@ private:
 	VkDescriptorSet globalBuffersSet;
 	VkDescriptorSet globalTexturesSet;
 	VkPipelineLayout pipelineLayout;
+
+	VKBuffer cameraUBO;
+	glm::mat4* camerasData;
+	unsigned int currentCamera = 0;
+	unsigned int singleCameraUBOAlignedSize = 0;
 };
 

@@ -16,7 +16,7 @@ class Material
 public:
 	Material();
 
-	bool Create(VKRenderer& renderer, const Mesh &mesh, const MaterialFeatures &features, const std::string& vertexPath, const std::string& fragmentPath, VkRenderPass renderPass);
+	bool Create(VKRenderer* renderer, const Mesh &mesh, const MaterialFeatures &features, const std::string& vertexPath, const std::string& fragmentPath, VkRenderPass renderPass);
 	void Dispose(VkDevice device);
 
 	VkPipeline GetPipeline() const { return pipeline.GetPipeline(); }

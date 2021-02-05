@@ -6,9 +6,9 @@ ParticleManager::ParticleManager()
 {
 }
 
-bool ParticleManager::Init(VKRenderer& renderer, VkRenderPass renderPass)
+bool ParticleManager::Init(VKRenderer* renderer, VkRenderPass renderPass)
 {
-	VKBase& base = renderer.GetBase();
+	VKBase& base = renderer->GetBase();
 	// Create the particle system pipeline
 
 	PipelineInfo pipeInfo = VKPipeline::DefaultFillStructs();
@@ -77,7 +77,7 @@ bool ParticleManager::Init(VKRenderer& renderer, VkRenderPass renderPass)
 
 	shader.LoadShader(base.GetDevice(), "Data/Shaders/particle_vert.spv", "Data/Shaders/particle_frag.spv");
 
-	if (!pipeline.Create(base.GetDevice(), pipeInfo, renderer.GetPipelineLayout(), shader, renderPass))
+	if (!pipeline.Create(base.GetDevice(), pipeInfo, renderer->GetPipelineLayout(), shader, renderPass))
 	{
 		std::cout << "Failed to create particle system pipeline\n";
 		return false;
@@ -86,7 +86,7 @@ bool ParticleManager::Init(VKRenderer& renderer, VkRenderPass renderPass)
 	return true;
 }
 
-bool ParticleManager::AddParticleSystem(VKRenderer& renderer, const std::string texturePath, unsigned int maxParticles)
+bool ParticleManager::AddParticleSystem(VKRenderer* renderer, const std::string texturePath, unsigned int maxParticles)
 {
 	ParticleSystem particleSystem;
 	if (!particleSystem.Init(renderer, texturePath, maxParticles))

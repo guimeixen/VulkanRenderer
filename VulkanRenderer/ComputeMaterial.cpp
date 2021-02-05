@@ -9,9 +9,9 @@ ComputeMaterial::ComputeMaterial()
 	setLayout = VK_NULL_HANDLE;
 }
 
-bool ComputeMaterial::Create(VKRenderer& renderer, const std::string& computePath)
+bool ComputeMaterial::Create(VKRenderer* renderer, const std::string& computePath)
 {
-	VkDevice device = renderer.GetBase().GetDevice();
+	VkDevice device = renderer->GetBase().GetDevice();
 
 	VkDescriptorSetLayoutBinding computeSetLayoutBinding = {};
 	computeSetLayoutBinding.binding = 0;

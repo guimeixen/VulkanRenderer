@@ -131,6 +131,24 @@ void Camera::SetProjectionMatrix(float fov, int windowWidth, int windowHeight, f
 	projectionMatrix = glm::perspective(glm::radians(fov), aspectRatio, near, far);
 }
 
+void Camera::SetProjectionMatrix(float left, float right, float bottom, float top, float near, float far)
+{
+	nearPlane = near;
+	farPlane = far;
+
+	projectionMatrix = glm::orthoRH(left, right, bottom, top, near, far);
+}
+
+void Camera::SetViewMatrix(const glm::mat4& view)
+{
+	viewMatrix = view;
+}
+
+void Camera::SetViewMatrix(const glm::vec3& pos, const glm::vec3& center, const glm::vec3& up)
+{
+	viewMatrix = glm::lookAt(pos, center, up);
+}
+
 void Camera::SetPosition(const glm::vec3& pos)
 {
 	position = pos;

@@ -4,9 +4,9 @@ Material::Material()
 {
 }
 
-bool Material::Create(VKRenderer& renderer, const Mesh &mesh, const MaterialFeatures& features, const std::string& vertexPath, const std::string& fragmentPath, VkRenderPass renderPass)
+bool Material::Create(VKRenderer* renderer, const Mesh &mesh, const MaterialFeatures& features, const std::string& vertexPath, const std::string& fragmentPath, VkRenderPass renderPass)
 {
-	VkDevice device = renderer.GetBase().GetDevice();
+	VkDevice device = renderer->GetBase().GetDevice();
 
 	shader.LoadShader(device, vertexPath, fragmentPath);
 
@@ -14,7 +14,7 @@ bool Material::Create(VKRenderer& renderer, const Mesh &mesh, const MaterialFeat
 
 	VkRect2D scissor = {};
 	scissor.offset = { 0, 0 };
-	scissor.extent = renderer.GetBase().GetSurfaceExtent();
+	scissor.extent = renderer->GetBase().GetSurfaceExtent();
 
 	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
@@ -48,7 +48,7 @@ bool Material::Create(VKRenderer& renderer, const Mesh &mesh, const MaterialFeat
 	pipeInfo.colorBlending.attachmentCount = 1;
 	pipeInfo.colorBlending.pAttachments = &colorBlendAttachment;
 
-	if (!pipeline.Create(device, pipeInfo, renderer.GetPipelineLayout(), shader, renderPass))
+	if (!pipeline.Create(device, pipeInfo, renderer->GetPipelineLayout(), shader, renderPass))
 		return 1;
 
 	return true;

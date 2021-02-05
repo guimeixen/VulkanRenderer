@@ -1,5 +1,9 @@
 #include "VKRenderer.h"
 
+#include "UniformBufferTypes.h"
+
+#include "glm/gtc/matrix_transform.hpp"
+
 #include <iostream>
 #include <cassert>
 
@@ -79,11 +83,11 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 
 	// Descriptor pool
 
-	VkDescriptorPoolSize poolSizes[4] = {};
+	VkDescriptorPoolSize poolSizes[5] = {};
 	poolSizes[0].descriptorCount = 1;
 	poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
 
-	poolSizes[1].descriptorCount = 10;
+	poolSizes[1].descriptorCount = 50;
 	poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 
 	poolSizes[2].descriptorCount = 1;
@@ -92,10 +96,13 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 	poolSizes[3].descriptorCount = 1;
 	poolSizes[3].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 
+	poolSizes[4].descriptorCount = 2;
+	poolSizes[4].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+
 	VkDescriptorPoolCreateInfo descPoolInfo = {};
 	descPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	descPoolInfo.maxSets = 8;
-	descPoolInfo.poolSizeCount = 4;
+	descPoolInfo.maxSets = 11;
+	descPoolInfo.poolSizeCount = 5;
 	descPoolInfo.pPoolSizes = poolSizes;
 
 	if (vkCreateDescriptorPool(device, &descPoolInfo, nullptr, &descriptorPool) != VK_SUCCESS)
@@ -111,7 +118,7 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 	cameraUboBinding.binding = 0;
 	cameraUboBinding.descriptorCount = 1;
 	cameraUboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC;
-	cameraUboBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+	cameraUboBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
 
 	VkDescriptorSetLayoutBinding instanceBufferBinding = {};
 	instanceBufferBinding.binding = 1;
@@ -119,11 +126,23 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 	instanceBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
 	instanceBufferBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-	VkDescriptorSetLayoutBinding globalBuffersSetBindings[] = { cameraUboBinding, instanceBufferBinding };
+	VkDescriptorSetLayoutBinding frameDataUboBinding = {};
+	frameDataUboBinding.binding = 2;
+	frameDataUboBinding.descriptorCount = 1;
+	frameDataUboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	frameDataUboBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkDescriptorSetLayoutBinding directionalLightUboBinding = {};
+	directionalLightUboBinding.binding = 3;
+	directionalLightUboBinding.descriptorCount = 1;
+	directionalLightUboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+	directionalLightUboBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkDescriptorSetLayoutBinding globalBuffersSetBindings[] = { cameraUboBinding, instanceBufferBinding, frameDataUboBinding, directionalLightUboBinding };
 
 	VkDescriptorSetLayoutCreateInfo globalBuffersSetLayoutInfo = {};
 	globalBuffersSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	globalBuffersSetLayoutInfo.bindingCount = 2;
+	globalBuffersSetLayoutInfo.bindingCount = 4;
 	globalBuffersSetLayoutInfo.pBindings = globalBuffersSetBindings;
 
 	if (vkCreateDescriptorSetLayout(device, &globalBuffersSetLayoutInfo, nullptr, &globalBuffersSetLayout) != VK_SUCCESS)
@@ -146,11 +165,17 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 	storageImageLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
 	storageImageLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
-	VkDescriptorSetLayoutBinding texturesSetLayoutBindings[] = { shadowMapLayoutBinding, storageImageLayoutBinding };
+	VkDescriptorSetLayoutBinding cloudsLayoutBinding = {};
+	cloudsLayoutBinding.binding = 2;
+	cloudsLayoutBinding.descriptorCount = 1;
+	cloudsLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	cloudsLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+	VkDescriptorSetLayoutBinding texturesSetLayoutBindings[] = { shadowMapLayoutBinding, storageImageLayoutBinding, cloudsLayoutBinding };
 
 	VkDescriptorSetLayoutCreateInfo globalTexturesSetLayoutInfo = {};
 	globalTexturesSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	globalTexturesSetLayoutInfo.bindingCount = 2;
+	globalTexturesSetLayoutInfo.bindingCount = 3;
 	globalTexturesSetLayoutInfo.pBindings = texturesSetLayoutBindings;
 
 	if (vkCreateDescriptorSetLayout(device, &globalTexturesSetLayoutInfo, nullptr, &globalTexturesSetLayout) != VK_SUCCESS)
@@ -160,17 +185,24 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 	}
 
 	// User Textures
+	const unsigned int MAX_TEXTURES_IN_USER_SET = 4;
+	VkDescriptorSetLayoutBinding userTexturesSetLayoutBindings[MAX_TEXTURES_IN_USER_SET] = {};
 
-	VkDescriptorSetLayoutBinding userTextureLayoutBinding = {};
-	userTextureLayoutBinding.binding = 0;
-	userTextureLayoutBinding.descriptorCount = 1;
-	userTextureLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-	userTextureLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+	for (unsigned int i = 0; i < MAX_TEXTURES_IN_USER_SET; i++)
+	{
+		VkDescriptorSetLayoutBinding userTextureLayoutBinding = {};
+		userTextureLayoutBinding.binding = (uint32_t)i;
+		userTextureLayoutBinding.descriptorCount = 1;
+		userTextureLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+		userTextureLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+		userTexturesSetLayoutBindings[i] = userTextureLayoutBinding;
+	}
 
 	VkDescriptorSetLayoutCreateInfo userTexturesSetLayoutInfo = {};
 	userTexturesSetLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-	userTexturesSetLayoutInfo.bindingCount = 1;
-	userTexturesSetLayoutInfo.pBindings = &userTextureLayoutBinding;
+	userTexturesSetLayoutInfo.bindingCount = MAX_TEXTURES_IN_USER_SET;
+	userTexturesSetLayoutInfo.pBindings = userTexturesSetLayoutBindings;
 
 	if (vkCreateDescriptorSetLayout(device, &userTexturesSetLayoutInfo, nullptr, &userTexturesSetLayout) != VK_SUCCESS)
 	{
@@ -224,6 +256,25 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 
 	std::cout << "Allocated descriptor sets\n";
 
+
+	// Buffer create function takes care of aligment if the buffer is a ubo
+	cameraUBO.Create(&base, sizeof(CameraUBO) * MAX_CAMERAS, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+
+	VkDescriptorBufferInfo bufferInfo = {};
+	bufferInfo.buffer = cameraUBO.GetBuffer();
+	bufferInfo.offset = 0;
+	bufferInfo.range = VK_WHOLE_SIZE;
+
+	UpdateGlobalBuffersSet(bufferInfo, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
+
+	camerasData = (glm::mat4*)malloc(static_cast<size_t>(cameraUBO.GetSize()));
+
+	unsigned int minUBOAlignment = static_cast<unsigned int>(base.GetPhysicalDeviceLimits().minUniformBufferOffsetAlignment);
+	singleCameraUBOAlignedSize = sizeof(CameraUBO);
+
+	if (minUBOAlignment > 0)
+		singleCameraUBOAlignedSize = (singleCameraUBOAlignedSize + minUBOAlignment - 1) & ~(minUBOAlignment - 1);
+
 	return true;
 }
 
@@ -231,6 +282,11 @@ void VKRenderer::Dispose()
 {
 	VkDevice device = base.GetDevice();
 	depthTexture.Dispose(device);
+
+	if (camerasData)
+		free(camerasData);
+
+	cameraUBO.Dispose(device);
 
 	vkDestroyDescriptorSetLayout(device, globalBuffersSetLayout, nullptr);
 	vkDestroyDescriptorSetLayout(device, globalTexturesSetLayout, nullptr);
@@ -252,11 +308,14 @@ void VKRenderer::Dispose()
 
 	vkDestroyRenderPass(device, renderPass, nullptr);
 
+	base.Dispose();
 }
 
 void VKRenderer::WaitForFrameFences()
 {
 	vkWaitForFences(base.GetDevice(), 1, &frameFences[currentFrame], VK_TRUE, UINT64_MAX);
+
+	currentCamera = 0;
 }
 
 void VKRenderer::AcquireNextImage()
@@ -342,6 +401,8 @@ void VKRenderer::Present(VkSemaphore graphicsSemaphore, VkSemaphore computeSemap
 	presentInfo.pImageIndices = &imageIndex;
 
 	VkResult res = vkQueuePresentKHR(presentQueue, &presentInfo);
+
+	//vkQueueWaitIdle(presentQueue);
 
 	if (res == VK_SUBOPTIMAL_KHR)
 	{
@@ -505,7 +566,26 @@ void VKRenderer::UpdateGlobalTexturesSet(const VkDescriptorImageInfo& info, uint
 	vkUpdateDescriptorSets(base.GetDevice(), 1, &write, 0, nullptr);
 }
 
-void VKRenderer::UpdateUserTextureSet(VkDescriptorSet set, const VKTexture2D& texture, unsigned int binding)
+void VKRenderer::UpdateUserTextureSet2D(VkDescriptorSet set, const VKTexture2D& texture, unsigned int binding)
+{
+	VkDescriptorImageInfo imageInfo = {};
+	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	imageInfo.imageView = texture.GetImageView();
+	imageInfo.sampler = texture.GetSampler();
+
+	VkWriteDescriptorSet descriptorWrites = {};
+	descriptorWrites.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+	descriptorWrites.dstBinding = (uint32_t)binding;
+	descriptorWrites.dstArrayElement = 0;
+	descriptorWrites.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+	descriptorWrites.descriptorCount = 1;
+	descriptorWrites.dstSet = set;
+	descriptorWrites.pImageInfo = &imageInfo;
+
+	vkUpdateDescriptorSets(base.GetDevice(), 1, &descriptorWrites, 0, nullptr);
+}
+
+void VKRenderer::UpdateUserTextureSet3D(VkDescriptorSet set, const VKTexture3D& texture, unsigned int binding)
 {
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
@@ -596,6 +676,36 @@ void VKRenderer::FreeGraphicsCommandBuffer(VkCommandBuffer cmdBuffer)
 void VKRenderer::FreeComputeCommandBuffer(VkCommandBuffer cmdBuffer)
 {
 	vkFreeCommandBuffers(base.GetDevice(), base.GetComputeCommandPool(), 1, &cmdBuffer);
+}
+
+void VKRenderer::SetCamera(const Camera& camera)
+{
+	CameraUBO* ubo = (CameraUBO*)(((uint64_t)camerasData + (currentCamera * singleCameraUBOAlignedSize)));
+	if (ubo)
+	{
+		ubo->proj = camera.GetProjectionMatrix();
+		ubo->proj[1][1] *= -1;
+		ubo->view = camera.GetViewMatrix();;
+		ubo->projView = ubo->proj * ubo->view;
+		ubo->invProj = glm::inverse(ubo->proj);
+		ubo->invView = glm::inverse(ubo->view);
+		ubo->camPos = glm::vec4(1.0f);
+	}
+
+	// Bind the camera descriptor set with the ubo
+	//vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &buffersSet, 0, nullptr);
+	uint32_t dynamicOffset = static_cast<uint32_t>(currentCamera) * singleCameraUBOAlignedSize;
+	vkCmdBindDescriptorSets(GetCurrentCmdBuffer(), VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &globalBuffersSet, 1, &dynamicOffset);
+
+	currentCamera++;
+}
+
+void VKRenderer::UpdateCameraUBO()
+{
+	VkDevice device = base.GetDevice();
+	void* mapped = cameraUBO.Map(device, 0, VK_WHOLE_SIZE);
+	memcpy(mapped, camerasData, static_cast<size_t>(currentCamera) * singleCameraUBOAlignedSize);
+	cameraUBO.Unmap(device);
 }
 
 void VKRenderer::BeginCmdRecording()

@@ -37,6 +37,12 @@
     <Filter Include="Header Files\Game">
       <UniqueIdentifier>{055481ff-23f2-4fcf-869b-dedf639d5f4a}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Header Files\Graphics\Effects">
+      <UniqueIdentifier>{ef03410c-c626-42a8-8f1e-d69805ab8dc0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source Files\Graphics\Effects">
+      <UniqueIdentifier>{13eac6e7-f342-487a-8b1b-e82c0e20d017}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp">
@@ -93,9 +99,6 @@
     <ClCompile Include="Random.cpp">
       <Filter>Source Files\Program</Filter>
     </ClCompile>
-    <ClCompile Include="Skybox.cpp">
-      <Filter>Source Files\Graphics</Filter>
-    </ClCompile>
     <ClCompile Include="ParticleManager.cpp">
       <Filter>Source Files\Graphics</Filter>
     </ClCompile>
@@ -119,6 +122,15 @@
     </ClCompile>
     <ClCompile Include="ComputeMaterial.cpp">
       <Filter>Source Files\Graphics</Filter>
+    </ClCompile>
+    <ClCompile Include="Skybox.cpp">
+      <Filter>Source Files\Graphics\Effects</Filter>
+    </ClCompile>
+    <ClCompile Include="VolumetricClouds.cpp">
+      <Filter>Source Files\Graphics\Effects</Filter>
+    </ClCompile>
+    <ClCompile Include="VKTexture3D.cpp">
+      <Filter>Source Files\VK</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -173,9 +185,6 @@
     <ClInclude Include="Random.h">
       <Filter>Header Files\Program</Filter>
     </ClInclude>
-    <ClInclude Include="Skybox.h">
-      <Filter>Header Files\Graphics</Filter>
-    </ClInclude>
     <ClInclude Include="ParticleManager.h">
       <Filter>Header Files\Graphics</Filter>
     </ClInclude>
@@ -204,6 +213,18 @@
       <Filter>Header Files\Graphics</Filter>
     </ClInclude>
     <ClInclude Include="ComputeMaterial.h">
+      <Filter>Header Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="VolumetricClouds.h">
+      <Filter>Header Files\Graphics\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="Skybox.h">
+      <Filter>Header Files\Graphics\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="VKTexture3D.h">
+      <Filter>Header Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Texture.h">
       <Filter>Header Files\Graphics</Filter>
     </ClInclude>
   </ItemGroup>

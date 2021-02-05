@@ -36,12 +36,15 @@ bool VKTexture2D::LoadFromFile(VKBase& base, const std::string& path, const Text
 
 	unsigned int textureSize = width * height * 4 * sizeof(unsigned char);
 
-	mipLevels = std::floor(std::log2(std::max(width, height))) + 1;
+	if (params.dontCreateMipMaps)
+		mipLevels = 1;
+	else
+		mipLevels = std::floor(std::log2(std::max(width, height))) + 1;
 
 	// Check if the format supports image blit
 	VkFormatProperties formatProperties;
 	vkGetPhysicalDeviceFormatProperties(base.GetPhysicalDevice(), params.format, &formatProperties);
-	if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) && !(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
+	if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) || !(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT))
 	{
 		std::cout << "Format doesn't support image blit\n";
 		return false;
@@ -384,6 +387,27 @@ bool VKTexture2D::CreateColorTexture(const VKBase &base, const TextureParams& te
 	this->width = width;
 	this->height = height;
 
+	// Make sure the format supports storage
+	VkFormatProperties props;
+	vkGetPhysicalDeviceFormatProperties(base.GetPhysicalDevice(), params.format, &props);
+
+	if (params.usedInCopySrc)
+	{
+		if (!(props.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) || !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT))
+		{
+			std::cout << "Format requested for storage image doesn't support storage\n";
+			return false;
+		}
+	}
+	if (params.usedInCopyDst)
+	{
+		if (!(props.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT) || !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
+		{
+			std::cout << "Format requested for storage image doesn't support storage\n";
+			return false;
+		}
+	}
+
 	VkImageCreateInfo imageCreateInfo = {};
 	imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -394,10 +418,16 @@ bool VKTexture2D::CreateColorTexture(const VKBase &base, const TextureParams& te
 	imageCreateInfo.mipLevels = 1;
 	imageCreateInfo.arrayLayers = 1;
 	imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-	imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	imageCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+	imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;	
 	imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 	imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	imageCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
+
+	if (params.usedInCopySrc)
+		imageCreateInfo.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	if (params.usedInCopyDst)
+		imageCreateInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
 	VkDevice device = base.GetDevice();
 
@@ -443,12 +473,31 @@ bool VKTexture2D::CreateWithData(VKBase& base, const TextureParams& textureParam
 	VkFormatProperties props;
 	vkGetPhysicalDeviceFormatProperties(base.GetPhysicalDevice(), params.format, &props);
 
-	if (!(props.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT))
+	if (params.useStorage)
 	{
-		std::cout << "Format requested for storage image doesn't support storage\n";
-		return false;
+		if (!(props.optimalTilingFeatures & VK_FORMAT_FEATURE_STORAGE_IMAGE_BIT))
+		{
+			std::cout << "Format requested for storage image doesn't support storage\n";
+			return false;
+		}
 	}
-
+	if (params.usedInCopySrc)
+	{
+		if (!(props.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) || !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT))
+		{
+			std::cout << "Format requested for storage image doesn't support storage\n";
+			return false;
+		}
+	}
+	if (params.usedInCopyDst)
+	{
+		if (!(props.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT) || !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
+		{
+			std::cout << "Format requested for storage image doesn't support storage\n";
+			return false;
+		}
+	}
+	
 	VkImageCreateInfo imageCreateInfo = {};
 	imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
 	imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
@@ -460,8 +509,16 @@ bool VKTexture2D::CreateWithData(VKBase& base, const TextureParams& textureParam
 	imageCreateInfo.arrayLayers = 1;
 	imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 	imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-	imageCreateInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT | VK_IMAGE_USAGE_SAMPLED_BIT;
 	imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+	imageCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
+
+	if (params.useStorage)
+		imageCreateInfo.usage |= VK_IMAGE_USAGE_STORAGE_BIT;
+	if (params.usedInCopySrc)
+		imageCreateInfo.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+	if (params.usedInCopyDst)
+		imageCreateInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
 
 	/*const vkutils::QueueFamilyIndices queueIndices = base.GetQueueFamilyIndices();
 
@@ -504,7 +561,10 @@ bool VKTexture2D::CreateWithData(VKBase& base, const TextureParams& textureParam
 
 	vkBindImageMemory(device, image, memory, 0);
 
-	base.TransitionImageLayout(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	if (params.useStorage)
+		base.TransitionImageLayout(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_GENERAL);
+	else
+		base.TransitionImageLayout(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 
 	if (!CreateImageView(device, VK_IMAGE_ASPECT_COLOR_BIT))
 		return false;

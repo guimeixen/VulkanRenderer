@@ -13,11 +13,11 @@ ParticleSystem::ParticleSystem()
 	startLifeTime = 1.0f;
 }
 
-bool ParticleSystem::Init(VKRenderer& renderer, const std::string texturePath, unsigned int maxParticles)
+bool ParticleSystem::Init(VKRenderer* renderer, const std::string texturePath, unsigned int maxParticles)
 {
 	this->maxParticles = maxParticles;
 
-	VKBase& base = renderer.GetBase();
+	VKBase& base = renderer->GetBase();
 
 	TextureParams textureParams = {};
 	textureParams.format = VK_FORMAT_R8G8B8A8_SRGB;
@@ -65,7 +65,7 @@ bool ParticleSystem::Init(VKRenderer& renderer, const std::string texturePath, u
 		RespawnParticle(particles[0]);		// Spawn one particle so they get update initially
 	}
 
-	set = renderer.AllocateUserTextureDescriptorSet();
+	set = renderer->AllocateUserTextureDescriptorSet();
 
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;

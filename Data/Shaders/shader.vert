@@ -22,6 +22,6 @@ void main()
 	
 	vec4 wPos = GetModelMatrix(startIndex) * vec4(inPos, 1.0);
 	
-	lightSpacePos = ubo.lightSpaceMatrix * wPos;
-    gl_Position = ubo.proj * ubo.view * wPos;
+	lightSpacePos = lightSpaceMatrix[0] * wPos;
+    gl_Position = projectionMatrix * viewMatrix * wPos;
 }

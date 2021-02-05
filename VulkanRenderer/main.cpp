@@ -13,6 +13,7 @@
 #include "MeshDefaults.h"
 #include "Material.h"
 #include "ComputeMaterial.h"
+#include "VolumetricClouds.h"
 
 #include "glm/gtc/matrix_transform.hpp"
 
@@ -26,8 +27,6 @@ unsigned int height = 480;
 
 int main()
 {
-	const int MAX_FRAMES_IN_FLIGHT = 2;
-	
 	Random::Init();
 	InputManager inputManager;
 	Window window;
@@ -38,14 +37,14 @@ int main()
 	TransformManager transformManager;
 	transformManager.Init(&allocator, 10);
 
-	VKRenderer renderer;
-	if (!renderer.Init(window.GetHandle(), width, height))
+	VKRenderer* renderer = new VKRenderer();
+	if (!renderer->Init(window.GetHandle(), width, height))
 	{
 		glfwTerminate();
 		return 1;
 	}
 
-	VKBase& base = renderer.GetBase();
+	VKBase& base = renderer->GetBase();
 
 	VkDevice device = base.GetDevice();
 	VkExtent2D surfaceExtent = base.GetSurfaceExtent();
@@ -84,6 +83,9 @@ int main()
 	VKFramebuffer shadowFB;
 	shadowFB.Create(base, shadowFBParams, 1024, 1024);
 
+	VolumetricClouds volClouds;
+	volClouds.Init(renderer);
+
 
 	ModelManager modelManager;
 	if (!modelManager.Init(renderer, offscreenFB.GetRenderPass()))
@@ -91,7 +93,6 @@ int main()
 		std::cout << "Failed to init model manager\n";
 		return 1;
 	}
-
 	
 	Entity trashCanEntity = entityManager.Create();
 	Entity floorEntity = entityManager.Create();
@@ -132,33 +133,39 @@ int main()
 	storageTexParams.addressMode = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_BORDER;
 	storageTexParams.filter = VK_FILTER_LINEAR;
 	storageTexParams.format = VK_FORMAT_R8G8B8A8_UNORM;
+	storageTexParams.useStorage = true;
 
 	VKTexture2D storageTexture;
 	storageTexture.CreateWithData(base, storageTexParams, 256, 256, nullptr);
 
+	VKBuffer frameDataUBO;
+	frameDataUBO.Create(&base, sizeof(FrameUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
-	
-	// We use a buffer with twice (or triple) the size and then offset into it so we don't have to create multiple buffers
-	// Buffer create function takes care of aligment if the buffer is a ubo
-	VKBuffer cameraUBO;
-	cameraUBO.Create(&base, sizeof(CameraUBO) * 2, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+	VKBuffer dirLightUBO;
+	dirLightUBO.Create(&base, sizeof(DirLightUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
 	// Create a large buffer which will hold the model matrices
 	VKBuffer instanceDataBuffer;
 	instanceDataBuffer.Create(&base, sizeof(glm::mat4) * 32, VK_BUFFER_USAGE_STORAGE_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
 	VkDescriptorBufferInfo bufferInfo = {};
-	bufferInfo.buffer = cameraUBO.GetBuffer();
-	bufferInfo.offset = 0;
-	bufferInfo.range = VK_WHOLE_SIZE;
-
-	renderer.UpdateGlobalBuffersSet(bufferInfo, 0, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC);
-
 	bufferInfo.buffer = instanceDataBuffer.GetBuffer();
 	bufferInfo.offset = 0;
 	bufferInfo.range = VK_WHOLE_SIZE;
 
-	renderer.UpdateGlobalBuffersSet(bufferInfo, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+	renderer->UpdateGlobalBuffersSet(bufferInfo, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
+
+	bufferInfo.buffer = frameDataUBO.GetBuffer();
+	bufferInfo.offset = 0;
+	bufferInfo.range = VK_WHOLE_SIZE;
+
+	renderer->UpdateGlobalBuffersSet(bufferInfo, 2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+
+	bufferInfo.buffer = dirLightUBO.GetBuffer();
+	bufferInfo.offset = 0;
+	bufferInfo.range = VK_WHOLE_SIZE;
+
+	renderer->UpdateGlobalBuffersSet(bufferInfo, 3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
@@ -170,8 +177,14 @@ int main()
 	imageInfo2.imageView = storageTexture.GetImageView();
 	imageInfo2.sampler = storageTexture.GetSampler();
 
-	renderer.UpdateGlobalTexturesSet(imageInfo, 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
-	renderer.UpdateGlobalTexturesSet(imageInfo2, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	VkDescriptorImageInfo imageInfo3 = {};
+	imageInfo3.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	imageInfo3.imageView = volClouds.GetCloudsTexture().GetImageView();
+	imageInfo3.sampler = volClouds.GetCloudsTexture().GetSampler();
+
+	renderer->UpdateGlobalTexturesSet(imageInfo, 0, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	renderer->UpdateGlobalTexturesSet(imageInfo2, 1, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
+	renderer->UpdateGlobalTexturesSet(imageInfo3, 2, VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER);
 
 
 	// OFFSCREEN
@@ -185,7 +198,7 @@ int main()
 	Mesh postQuadMesh = {};
 	postQuadMesh.vertexCount = 3;
 	Material postQuadMat;
-	postQuadMat.Create(renderer, postQuadMesh, postQuadMatFeatures, "Data/Shaders/post_quad_vert.spv", "Data/Shaders/post_quad_frag.spv", renderer.GetDefaultRenderPass());
+	postQuadMat.Create(renderer, postQuadMesh, postQuadMatFeatures, "Data/Shaders/post_quad_vert.spv", "Data/Shaders/post_quad_frag.spv", renderer->GetDefaultRenderPass());
 
 	// SHADOW MAPPING
 
@@ -226,14 +239,14 @@ int main()
 	shadowMat.Create(renderer, shadowMesh, shadowMatFeatures, "Data/Shaders/shadow_vert.spv", "Data/Shaders/shadow_frag.spv", shadowFB.GetRenderPass());
 
 
-	VkDescriptorSet quadSet = renderer.AllocateUserTextureDescriptorSet();
-	renderer.UpdateUserTextureSet(quadSet, offscreenFB.GetFirstColorTexture(), 0);
+	VkDescriptorSet quadSet = renderer->AllocateUserTextureDescriptorSet();
+	renderer->UpdateUserTextureSet2D(quadSet, offscreenFB.GetFirstColorTexture(), 0);
 
 	// Compute
 	ComputeMaterial computeMat;
 	computeMat.Create(renderer, "Data/Shaders/compute.spv");
 	
-	VkDescriptorSet computeSet = renderer.AllocateSetFromLayout(computeMat.GetSetLayout());
+	VkDescriptorSet computeSet = renderer->AllocateSetFromLayout(computeMat.GetSetLayout());
 
 	VkDescriptorImageInfo compImgInfo = {};
 	compImgInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
@@ -300,7 +313,7 @@ int main()
 	const vkutils::QueueFamilyIndices& indices = base.GetQueueFamilyIndices();
 
 	// Record the compute command buffer
-	VkCommandBuffer computeCmdBuffer = renderer.CreateComputeCommandBuffer(true);
+	VkCommandBuffer computeCmdBuffer = renderer->CreateComputeCommandBuffer(true);
 
 
 	VkImageSubresourceRange range = {};
@@ -365,7 +378,7 @@ int main()
 		range.layerCount = 1;
 		range.levelCount = 1;
 
-		VkCommandBuffer cmd = renderer.CreateGraphicsCommandBuffer(true);
+		VkCommandBuffer cmd = renderer->CreateGraphicsCommandBuffer(true);
 
 		VkImageMemoryBarrier releaseBarrier = {};
 		releaseBarrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -394,7 +407,7 @@ int main()
 		}
 		vkQueueWaitIdle(base.GetGraphicsQueue());		// Or wait for fence?
 
-		renderer.FreeGraphicsCommandBuffer(cmd);
+		renderer->FreeGraphicsCommandBuffer(cmd);
 	}
 
 	
@@ -411,16 +424,16 @@ int main()
 
 	// Create mipmaps
 
-	VkCommandBuffer cmdBuffer = renderer.CreateGraphicsCommandBuffer(true);
+	VkCommandBuffer cmdBuffer = renderer->CreateGraphicsCommandBuffer(true);
 
-	renderer.CreateMipMaps(cmdBuffer, modelManager.GetRenderModel(trashCanEntity).texture);
-	renderer.CreateMipMaps(cmdBuffer, modelManager.GetRenderModel(floorEntity).texture);
+	renderer->CreateMipMaps(cmdBuffer, modelManager.GetRenderModel(trashCanEntity).texture);
+	renderer->CreateMipMaps(cmdBuffer, modelManager.GetRenderModel(floorEntity).texture);
 
 	const std::vector<ParticleSystem>& particleSystems = particleManager.GetParticlesystems();
 
 	for (size_t i = 0; i < particleSystems.size(); i++)
 	{
-		renderer.CreateMipMaps(cmdBuffer, particleSystems[i].GetTexture());
+		renderer->CreateMipMaps(cmdBuffer, particleSystems[i].GetTexture());
 	}
 
 	if (vkEndCommandBuffer(cmdBuffer) != VK_SUCCESS)
@@ -456,7 +469,7 @@ int main()
 
 	vkDestroyFence(device, fence, nullptr);
 
-	renderer.FreeGraphicsCommandBuffer(cmdBuffer);
+	renderer->FreeGraphicsCommandBuffer(cmdBuffer);
 
 	float lastTime = 0.0f;
 	float deltaTime = 0.0f;
@@ -465,16 +478,13 @@ int main()
 	camera.SetPosition(glm::vec3(0.0f, 0.5f, 1.5f));
 	camera.SetProjectionMatrix(85.0f, width, height, 0.1f, 20.0f);
 
-	glm::mat4 *camerasData = (glm::mat4*)malloc(static_cast<size_t>(cameraUBO.GetSize()));
+	glm::mat4 previousFrameView = glm::mat4(1.0f);
 
-	unsigned int minUBOAlignment = static_cast<unsigned int>(base.GetPhysicalDeviceLimits().minUniformBufferOffsetAlignment);
-	unsigned int alignSingleUBOSize = sizeof(CameraUBO);
+	Camera lightSpaceCamera;
+	lightSpaceCamera.SetProjectionMatrix(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 10.0f);
+	lightSpaceCamera.SetViewMatrix(glm::vec3(0.0f, 2.0f, 2.5f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
-	if (minUBOAlignment > 0)
-		alignSingleUBOSize = (alignSingleUBOSize + minUBOAlignment - 1) & ~(minUBOAlignment - 1);
-
-	unsigned int currentCamera = 0;
-	unsigned int maxCamera = 2;
+	float timeElapsed = 0.0f;
 
 	while (!glfwWindowShouldClose(window.GetHandle()))
 	{
@@ -483,6 +493,7 @@ int main()
 		double currentTime = glfwGetTime();
 		deltaTime = (float)currentTime - lastTime;
 		lastTime = (float)currentTime;
+		timeElapsed += deltaTime;
 
 		camera.Update(deltaTime, true, true);
 
@@ -491,43 +502,16 @@ int main()
 		auto curTime = std::chrono::high_resolution_clock::now();
 		float time = std::chrono::duration<float, std::chrono::seconds::period>(curTime - startTime).count();
 
-		// Set camera at 0 at the start of the frame
-		currentCamera = 0;
+		renderer->WaitForFrameFences();
+		renderer->BeginCmdRecording();
 
-		glm::mat4 lightProj = glm::ortho(-5.0f, 5.0f, -5.0f, 5.0f, 0.1f, 10.0f);
-		glm::mat4 lightView = glm::lookAt(glm::vec3(0.0f, 2.0f, 2.5f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 00.0f));
-		glm::mat4 lightSpaceMatrix = lightProj * lightView;
+		VkCommandBuffer cmdBuffer = renderer->GetCurrentCmdBuffer();
 
-		//glm::mat4 modelMatrix = glm::rotate(glm::mat4(1.0f), time * glm::radians(20.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+		VkPipelineLayout pipelineLayout = renderer->GetPipelineLayout();
+		VkDescriptorSet globalTexturesSet = renderer->GetGlobalTexturesSet();
 
-		CameraUBO* ubo = (CameraUBO*)(((uint64_t)camerasData + (currentCamera * alignSingleUBOSize)));
-		if (ubo)
-		{
-			
-			ubo->view = lightView;
-			ubo->proj = lightProj;
-			ubo->projView = lightProj * lightView;
-			ubo->proj[1][1] *= -1;
-		}
-
-
-		renderer.WaitForFrameFences();
-		renderer.BeginCmdRecording();
-
-		VkCommandBuffer cmdBuffer = renderer.GetCurrentCmdBuffer();
-
-		VkPipelineLayout pipelineLayout = renderer.GetPipelineLayout();
-		VkDescriptorSet globalBuffersSet = renderer.GetGlobalBuffersSet();
-		VkDescriptorSet globalTexturesSet = renderer.GetGlobalTexturesSet();
-
-		// Bind the camera descriptor set with the ubo
-		//vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &buffersSet, 0, nullptr);
-		uint32_t dynamicOffset = static_cast<uint32_t>(currentCamera) * alignSingleUBOSize;
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &globalBuffersSet, 1, &dynamicOffset);
-
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &globalTexturesSet, 0, nullptr);
-
-		currentCamera++;
+		
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &globalTexturesSet, 0, nullptr);	
 
 		VkViewport viewport = {};
 		viewport.x = 0.0f;
@@ -542,34 +526,28 @@ int main()
 
 		vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
 
+		renderer->SetCamera(lightSpaceCamera);
+
 		VkClearValue depthClearValue = {};
 		depthClearValue.depthStencil = { 1.0f, 0 };
 
-		renderer.BeginRenderPass(cmdBuffer, shadowFB, 1, &depthClearValue);
+		renderer->BeginRenderPass(cmdBuffer, shadowFB, 1, &depthClearValue);
 		modelManager.Render(cmdBuffer, pipelineLayout, shadowMat.GetPipeline());
 		vkCmdEndRenderPass(cmdBuffer);
 
-		// OFFSCREEN
-
 		// Set the normal camera
-		ubo = (CameraUBO*)(((uint64_t)camerasData + (currentCamera * alignSingleUBOSize)));
-		if (ubo)
-		{
-			ubo->view = camera.GetViewMatrix();
-			ubo->proj = camera.GetProjectionMatrix();
-			ubo->projView = ubo->proj * ubo->view;
-			ubo->proj[1][1] *= -1;
-			ubo->lightSpaceMatrix = lightSpaceMatrix;
-		}
+		renderer->SetCamera(camera);
 
-		dynamicOffset = static_cast<uint32_t>(currentCamera) * alignSingleUBOSize;
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &globalBuffersSet, 1, &dynamicOffset);
+		// Clouds low res pass
+		volClouds.PerformCloudsPass(renderer, cmdBuffer);
+		// Clouds reprojection pass
+		volClouds.PerformCloudsReprojectionPass(renderer, cmdBuffer);
 
+		// OFFSCREEN
 		viewport.width = (float)surfaceExtent.width;
 		viewport.height = (float)surfaceExtent.height;
 
 		vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
-
 
 		if (indices.graphicsFamilyIndex != indices.computeFamilyIndex)
 		{
@@ -591,12 +569,11 @@ int main()
 		}
 		
 
-
 		VkClearValue clearValues[2] = {};
 		clearValues[0].color = { 0.3f, 0.3f, 0.3f, 1.0f };
 		clearValues[1].depthStencil = { 1.0f, 0 };
 
-		renderer.BeginRenderPass(cmdBuffer, offscreenFB, 2, clearValues);
+		renderer->BeginRenderPass(cmdBuffer, offscreenFB, 2, clearValues);
 	
 		modelManager.Render(cmdBuffer, pipelineLayout, VK_NULL_HANDLE);
 
@@ -613,7 +590,7 @@ int main()
 		skybox.Render(cmdBuffer, pipelineLayout);
 
 		// Particle systems have to be rendered after the skybox
-		particleManager.Render(cmdBuffer, renderer.GetPipelineLayout());
+		particleManager.Render(cmdBuffer, renderer->GetPipelineLayout());
 
 
 		vkCmdEndRenderPass(cmdBuffer);
@@ -639,21 +616,58 @@ int main()
 
 
 		// Normal pass
-		renderer.BeginDefaultRenderPass();
+		renderer->BeginDefaultRenderPass();
 
 		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, postQuadMat.GetPipeline());
 		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &quadSet, 0, nullptr);
 		vkCmdDraw(cmdBuffer, (uint32_t)postQuadMesh.vertexCount, 1, 0, 0);
 
-		renderer.EndDefaultRenderPass();
-		renderer.EndCmdRecording();
+		renderer->EndDefaultRenderPass();
+		renderer->EndCmdRecording();
 
 
 		// Update buffers
+		renderer->UpdateCameraUBO();
 
-		void* mapped = cameraUBO.Map(device, 0, VK_WHOLE_SIZE);
-		memcpy(mapped, camerasData, static_cast<size_t>(currentCamera + 1) * alignSingleUBOSize);
-		cameraUBO.Unmap(device);
+		const VolumetricCloudsData& volCloudsData = volClouds.GetVolumetricCloudsData();
+
+		FrameUBO frameData = {};
+		frameData.deltaTime = deltaTime;
+		frameData.timeElapsed = timeElapsed;
+		frameData.ambientBottomColor = volCloudsData.ambientBottomColor;
+		frameData.ambientMult = volCloudsData.ambientMult;
+		frameData.ambientTopColor = volCloudsData.ambientTopColor;
+		frameData.cloudCoverage = volCloudsData.cloudCoverage;
+		frameData.cloudStartHeight = volCloudsData.cloudStartHeight;
+		frameData.cloudLayerThickness = volCloudsData.cloudLayerThickness;
+		frameData.cloudLayerTopHeight = volCloudsData.cloudLayerTopHeight;
+		frameData.timeScale = volCloudsData.timeScale;
+		frameData.hgForward = volCloudsData.hgForward;
+		frameData.densityMult = volCloudsData.densityMult;
+		frameData.detailScale = volCloudsData.detailScale;
+		frameData.highCloudsCoverage = volCloudsData.highCloudsCoverage;
+		frameData.highCloudsTimeScale = volCloudsData.highCloudsTimeScale;
+		frameData.silverLiningIntensity = volCloudsData.silverLiningIntensity;
+		frameData.silverLiningSpread = volCloudsData.cloudCoverage;
+		frameData.forwardSilverLiningIntensity = volCloudsData.forwardSilverLiningIntensity;
+		frameData.directLightMult = volCloudsData.directLightMult;
+		frameData.cloudsInvProjJitter = glm::inverse(camera.GetProjectionMatrix()) * volClouds.GetJitterMatrix();
+		frameData.frameNumber = volClouds.GetFrameNumber();
+		frameData.previousFrameView = previousFrameView;
+		frameData.cloudUpdateBlockSize = volClouds.GetUpdateBlockSize();
+
+		DirLightUBO dirLightData = {};
+		dirLightData.lightSpaceMatrix[0] = lightSpaceCamera.GetProjectionMatrix() * lightSpaceCamera.GetViewMatrix();
+
+
+
+		void* mapped = frameDataUBO.Map(device, 0, VK_WHOLE_SIZE);
+		memcpy(mapped, &frameData, sizeof(FrameUBO));
+		frameDataUBO.Unmap(device);
+
+		mapped = dirLightUBO.Map(device, 0, VK_WHOLE_SIZE);
+		memcpy(mapped, &dirLightData, sizeof(DirLightUBO));
+		dirLightUBO.Unmap(device);
 
 
 		// Update model matrices
@@ -696,23 +710,24 @@ int main()
 			return 1;
 		}
 		
-		renderer.AcquireNextImage();
-		renderer.Present(graphicsSemaphore, computeSemaphore);
+		renderer->AcquireNextImage();
+		renderer->Present(graphicsSemaphore, computeSemaphore);
+
+		volClouds.EndFrame();
+		previousFrameView = camera.GetViewMatrix();
 	}
 
 	vkDeviceWaitIdle(device);
 
-	if (camerasData)
-		free(camerasData);
-
 	quadMat.Dispose(device);
 	quadMesh.vb.Dispose(device);
 	computeMat.Dispose(device);
-
-	cameraUBO.Dispose(device);
+	volClouds.Dispose(device);
 	offscreenFB.Dispose(device);
 	shadowFB.Dispose(device);
 	instanceDataBuffer.Dispose(device);
+	frameDataUBO.Dispose(device);
+	dirLightUBO.Dispose(device);
 
 	vkDestroyFence(device, computeFence, nullptr);
 	storageTexture.Dispose(device);
@@ -727,8 +742,8 @@ int main()
 	shadowMat.Dispose(device);
 
 	transformManager.Dispose();
-	renderer.Dispose();
-	base.Dispose();
+	renderer->Dispose();
+	delete renderer;
 
 	glfwTerminate();
 

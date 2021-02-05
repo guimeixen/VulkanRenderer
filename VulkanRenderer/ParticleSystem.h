@@ -25,7 +25,7 @@ class ParticleSystem
 public:
 	ParticleSystem();
 
-	bool Init(VKRenderer &renderer, const std::string texturePath, unsigned int maxParticles);
+	bool Init(VKRenderer* renderer, const std::string texturePath, unsigned int maxParticles);
 	void Update(float dt);
 	void Render(VkCommandBuffer cmdBuffer, VkPipeline pipeline, VkPipelineLayout pipelineLayout);
 	const std::vector<ParticleInstanceData>& GetInstanceData();
