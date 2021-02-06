@@ -30,7 +30,7 @@ void TransformManager::Init(Allocator* allocator, unsigned int initialCapacity)
 
 	isInit = true;
 
-	Log::Print(LogLevel::LEVEL_INFO, "Init Transform manager\n");
+	//Log::Print(LogLevel::LEVEL_INFO, "Init Transform manager\n");
 }
 
 void TransformManager::Dispose()
@@ -38,7 +38,7 @@ void TransformManager::Dispose()
 	if (instanceData.buffer)
 		allocator->Free(instanceData.buffer);
 
-	Log::Print(LogLevel::LEVEL_INFO, "Disposing Transform manager\n");
+	//Log::Print(LogLevel::LEVEL_INFO, "Disposing Transform manager\n");
 }
 
 void TransformManager::ClearModifiedTransforms()

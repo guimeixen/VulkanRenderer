@@ -20,6 +20,9 @@ public:
 
 	const glm::mat4& GetProjectionMatrix() const { return projectionMatrix; }
 	const glm::mat4& GetViewMatrix() const { return viewMatrix; }
+	const glm::vec3& GetPosition() const { return position; }
+	float GetNearPlane() const { return nearPlane; }
+	float GetFarPlane() const { return farPlane; }
 
 private:
 	void DoMovement(float dt);

@@ -9,6 +9,7 @@ struct MaterialFeatures
 	VkBool32 enableDepthWrite;
 	VkFrontFace frontFace;
 	VkCullModeFlags cullMode;
+	bool enableBlend;
 };
 
 class Material

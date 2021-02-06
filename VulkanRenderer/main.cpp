@@ -476,7 +476,7 @@ int main()
 
 	Camera camera;
 	camera.SetPosition(glm::vec3(0.0f, 0.5f, 1.5f));
-	camera.SetProjectionMatrix(85.0f, width, height, 0.1f, 20.0f);
+	camera.SetProjectionMatrix(75.0f, width, height, 0.5f, 1000.0f);
 
 	glm::mat4 previousFrameView = glm::mat4(1.0f);
 
@@ -632,6 +632,7 @@ int main()
 		const VolumetricCloudsData& volCloudsData = volClouds.GetVolumetricCloudsData();
 
 		FrameUBO frameData = {};
+		frameData.screenRes = glm::vec2((float)width, (float)height);
 		frameData.deltaTime = deltaTime;
 		frameData.timeElapsed = timeElapsed;
 		frameData.ambientBottomColor = volCloudsData.ambientBottomColor;

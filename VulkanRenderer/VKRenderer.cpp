@@ -689,7 +689,8 @@ void VKRenderer::SetCamera(const Camera& camera)
 		ubo->projView = ubo->proj * ubo->view;
 		ubo->invProj = glm::inverse(ubo->proj);
 		ubo->invView = glm::inverse(ubo->view);
-		ubo->camPos = glm::vec4(1.0f);
+		ubo->camPos = glm::vec4(camera.GetPosition(), 1.0f);
+		ubo->nearFarPlane = glm::vec2(camera.GetNearPlane(), camera.GetFarPlane());
 	}
 
 	// Bind the camera descriptor set with the ubo

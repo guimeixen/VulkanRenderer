@@ -41,11 +41,15 @@ void main()
 	
 		//bool isOut = any(greaterThan(abs(prevFramePos.xy - vec2(0.5)), vec2(0.5)));
 		if(prevFramePos.x < 0.0 || prevFramePos.x > 1.0 || prevFramePos.y < 0.0 || prevFramePos.y > 1.0)
+		{
 			//color = vec4(1.0,0.0,0.0,1.0);
 			color = texture(cloudLowResTexture, uv);
+		}
 		else
+		{
 			//color = vec4(0.0, 1.0, 0.0, 1.0);
 			color = texture(previousFrameTexture, prevFramePos.xy);
+		}
 	}
 	//color = texture(cloudLowResTexture, uv);
 }

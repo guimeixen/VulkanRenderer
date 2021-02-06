@@ -25,6 +25,13 @@ Camera::Camera()
 
 	moveSpeed = 4.0f;
 
+	aspectRatio = 0.0f;
+	nearPlane = 0.0f;
+	farPlane = 0.0f;
+	fov = 0.0f;
+	width = 0.0f;
+	height = 0.0f;
+
 	//UpdateCameraVectors();
 }
 

@@ -236,40 +236,8 @@ void VolumetricClouds::PerformCloudsReprojectionPass(VKRenderer* renderer, VkCom
 	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
 	barrier.subresourceRange.layerCount = 1;
 	barrier.subresourceRange.levelCount = 1;
-	barrier.image = cloudsLowResFB.GetFirstColorTexture().GetImage();*/
+	barrier.image = previousFrameTexture[(currentFrame + 1) % 2].GetImage();*/
 
-	barrier.srcAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT |
-		VK_ACCESS_INDEX_READ_BIT |
-		VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
-		VK_ACCESS_UNIFORM_READ_BIT |
-		VK_ACCESS_INPUT_ATTACHMENT_READ_BIT |
-		VK_ACCESS_SHADER_READ_BIT |
-		VK_ACCESS_SHADER_WRITE_BIT |
-		VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-		VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-		VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-		VK_ACCESS_TRANSFER_READ_BIT |
-		VK_ACCESS_TRANSFER_WRITE_BIT |
-		VK_ACCESS_HOST_READ_BIT |
-		VK_ACCESS_HOST_WRITE_BIT,
-	barrier.dstAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT |
-		VK_ACCESS_INDEX_READ_BIT |
-		VK_ACCESS_VERTEX_ATTRIBUTE_READ_BIT |
-		VK_ACCESS_UNIFORM_READ_BIT |
-		VK_ACCESS_INPUT_ATTACHMENT_READ_BIT |
-		VK_ACCESS_SHADER_READ_BIT |
-		VK_ACCESS_SHADER_WRITE_BIT |
-		VK_ACCESS_COLOR_ATTACHMENT_READ_BIT |
-		VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT |
-		VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT |
-		VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT |
-		VK_ACCESS_TRANSFER_READ_BIT |
-		VK_ACCESS_TRANSFER_WRITE_BIT |
-		VK_ACCESS_HOST_READ_BIT |
-		VK_ACCESS_HOST_WRITE_BIT;
-
-	// NOT SURE WHY EVEN WITH THE BARRIER IT STILL FLICKERS
 	//vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &barrier, 0, nullptr, 0, nullptr);
 
 	VkViewport viewport = {};
@@ -325,13 +293,16 @@ void VolumetricClouds::PerformCloudsReprojectionPass(VKRenderer* renderer, VkCom
 	// Transition both images now to SHADER_READ
 	base.TransitionImageLayoutCmdBuffer(cmdBuffer, srcImg, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
 	base.TransitionImageLayoutCmdBuffer(cmdBuffer, dstImg, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-	
+	//vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+
 	//currentFrame = (currentFrame + 1) % 2;
 }
 
 void VolumetricClouds::EndFrame()
 {
 	frameCount++;
+	if (frameCount >= 16)
+		frameCount = 0;
 	frameNumber = frameNumbers[frameCount % (cloudUpdateBlockSize * cloudUpdateBlockSize)];
 	//frameNumber = (frameNumber + 1) % (cloudUpdateBlockSize * cloudUpdateBlockSize);
 }
