@@ -379,7 +379,7 @@ bool VKTexture2D::CreateDepthTexture(const VKBase& base, const TextureParams& te
 	return true;
 }
 
-bool VKTexture2D::CreateColorTexture(const VKBase &base, const TextureParams& textureParams, unsigned int width, unsigned int height)
+bool VKTexture2D::CreateColorTexture(VKBase &base, const TextureParams& textureParams, unsigned int width, unsigned int height)
 {
 	params = textureParams;
 	textureType = TextureType::TEXTURE_2D;
@@ -395,7 +395,7 @@ bool VKTexture2D::CreateColorTexture(const VKBase &base, const TextureParams& te
 	{
 		if (!(props.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) || !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT))
 		{
-			std::cout << "Format requested for storage image doesn't support storage\n";
+			std::cout << "Format requested for image transfer doesn't support transfer\n";
 			return false;
 		}
 	}
@@ -403,7 +403,7 @@ bool VKTexture2D::CreateColorTexture(const VKBase &base, const TextureParams& te
 	{
 		if (!(props.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT) || !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
 		{
-			std::cout << "Format requested for storage image doesn't support storage\n";
+			std::cout << "Format requested for image transfer doesn't support transfer\n";
 			return false;
 		}
 	}
@@ -453,6 +453,8 @@ bool VKTexture2D::CreateColorTexture(const VKBase &base, const TextureParams& te
 
 	vkBindImageMemory(device, image, memory, 0);
 
+	base.TransitionImageLayout(image, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
 	if (!CreateImageView(device, VK_IMAGE_ASPECT_COLOR_BIT))
 		return false;
 	if (!CreateSampler(device))
@@ -485,7 +487,7 @@ bool VKTexture2D::CreateWithData(VKBase& base, const TextureParams& textureParam
 	{
 		if (!(props.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_SRC_BIT) || !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_SRC_BIT))
 		{
-			std::cout << "Format requested for storage image doesn't support storage\n";
+			std::cout << "Format requested for image transfer doesn't support transfer\n";
 			return false;
 		}
 	}
@@ -493,7 +495,7 @@ bool VKTexture2D::CreateWithData(VKBase& base, const TextureParams& textureParam
 	{
 		if (!(props.optimalTilingFeatures & VK_FORMAT_FEATURE_BLIT_DST_BIT) || !(props.optimalTilingFeatures & VK_FORMAT_FEATURE_TRANSFER_DST_BIT))
 		{
-			std::cout << "Format requested for storage image doesn't support storage\n";
+			std::cout << "Format requested for image transfer doesn't support transfer\n";
 			return false;
 		}
 	}
@@ -510,6 +512,7 @@ bool VKTexture2D::CreateWithData(VKBase& base, const TextureParams& textureParam
 	imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
 	imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
 	imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
 	imageCreateInfo.usage = VK_IMAGE_USAGE_SAMPLED_BIT;
 
@@ -519,23 +522,6 @@ bool VKTexture2D::CreateWithData(VKBase& base, const TextureParams& textureParam
 		imageCreateInfo.usage |= VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
 	if (params.usedInCopyDst)
 		imageCreateInfo.usage |= VK_IMAGE_USAGE_TRANSFER_DST_BIT;
-
-	/*const vkutils::QueueFamilyIndices queueIndices = base.GetQueueFamilyIndices();
-
-	// If the graphics andcompute queues are different, we create an image that can be shared between them
-	// Performance can be worse than exclusive sharing mode, but we save some synchronization to keep this simple
-	if (queueIndices.graphicsFamilyIndex != queueIndices.computeFamilyIndex)
-	{
-		uint32_t indices[] = { queueIndices.graphicsFamilyIndex, queueIndices.computeFamilyIndex };
-
-		imageCreateInfo.sharingMode = VK_SHARING_MODE_CONCURRENT;
-		imageCreateInfo.queueFamilyIndexCount = 2;
-		imageCreateInfo.pQueueFamilyIndices = indices;
-	}
-	else
-	{*/
-		imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-	//}
 
 	VkDevice device = base.GetDevice();
 

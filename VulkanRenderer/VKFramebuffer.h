@@ -16,7 +16,7 @@ class VKFramebuffer
 public:
 	VKFramebuffer();
 
-	bool Create(const VKBase& base, const FramebufferParams &params, unsigned int width, unsigned int height);
+	bool Create(VKBase& base, const FramebufferParams &params, unsigned int width, unsigned int height);
 	void Dispose(VkDevice device);
 
 	VkFramebuffer GetFramebuffer() const { return framebuffer; }

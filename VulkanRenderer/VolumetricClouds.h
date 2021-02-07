@@ -35,7 +35,6 @@ public:
 	bool Init(VKRenderer* renderer);
 	void Dispose(VkDevice device);
 	void PerformCloudsPass(VKRenderer* renderer, VkCommandBuffer cmdBuffer);
-	void PerformCloudsReprojectionPass(VKRenderer* renderer, VkCommandBuffer cmdBuffer);
 	void EndFrame();
 
 	const VKTexture2D& GetCloudsTexture() const { return cloudsReprojectionFB.GetFirstColorTexture(); }
@@ -48,7 +47,7 @@ private:
 	VKFramebuffer cloudsLowResFB;
 	VKFramebuffer cloudsReprojectionFB;
 	VKFramebuffer cloudCopyFB;
-	VKTexture2D previousFrameTexture[2];
+	//VKTexture2D previousFrameTexture[2];
 	VKTexture3D baseNoiseTexture;
 	VKTexture3D highFreqNoiseTexture;
 	VKTexture2D weatherTexture;
@@ -57,6 +56,7 @@ private:
 	VkDescriptorSet cloudMatSet;
 	Material cloudReprojectionMat;
 	VkDescriptorSet cloudReprojectionSet[2];
+	Material cloudCopyMat;
 	Mesh quadMesh;
 
 	VolumetricCloudsData volCloudsData;

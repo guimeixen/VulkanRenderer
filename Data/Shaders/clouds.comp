@@ -1,0 +1,27 @@
+#version 450
+
+layout(local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba8) uniform writeonly image2D outputImg;
+
+vec3 UVToCamRay(vec2 uv)
+{
+	mat4 m = cloudsInvProjJitter;
+	m[1][1] *= -1.0;		// Flip the sign of the y because in Vulkan clip space the y start on the top
+	m[3][1] *= -1.0;		// Flip the sign of the y translation in the jittered projection matrix
+
+	vec4 clipSpacePos = vec4(uv * 2.0 - 1.0, 1.0, 1.0);
+	vec4 viewSpacePos = m * clipSpacePos;
+	viewSpacePos.xyz /= viewSpacePos.w;
+	vec4 worldSpacePos = invView * viewSpacePos;
+	
+	return worldSpacePos.xyz;
+}
+
+void main()
+{
+	vec2 uv = vec2(gl_GlobalInvocationID.xy / cloudsLowResTextureSize);		// Don't use division, multiply instead
+	vec3 camRay = UVToCamRay(uv);
+
+	imageStore(outputImg, ivec2(gl_GlobalInvocationID.xy), vec4(1.0, 0.0, 0.0, 0.0));
+}

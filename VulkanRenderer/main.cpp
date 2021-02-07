@@ -22,7 +22,7 @@
 #include <array>
 #include <chrono>
 
-unsigned int width = 640;
+unsigned int width = 960;
 unsigned int height = 480;
 
 int main()
@@ -485,6 +485,7 @@ int main()
 	lightSpaceCamera.SetViewMatrix(glm::vec3(0.0f, 2.0f, 2.5f), glm::vec3(0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
 
 	float timeElapsed = 0.0f;
+	const auto startTime = std::chrono::high_resolution_clock::now();
 
 	while (!glfwWindowShouldClose(window.GetHandle()))
 	{
@@ -497,8 +498,6 @@ int main()
 
 		camera.Update(deltaTime, true, true);
 
-		static auto startTime = std::chrono::high_resolution_clock::now();
-
 		auto curTime = std::chrono::high_resolution_clock::now();
 		float time = std::chrono::duration<float, std::chrono::seconds::period>(curTime - startTime).count();
 
@@ -506,11 +505,8 @@ int main()
 		renderer->BeginCmdRecording();
 
 		VkCommandBuffer cmdBuffer = renderer->GetCurrentCmdBuffer();
-
 		VkPipelineLayout pipelineLayout = renderer->GetPipelineLayout();
 		VkDescriptorSet globalTexturesSet = renderer->GetGlobalTexturesSet();
-
-		
 		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &globalTexturesSet, 0, nullptr);	
 
 		VkViewport viewport = {};
@@ -538,10 +534,8 @@ int main()
 		// Set the normal camera
 		renderer->SetCamera(camera);
 
-		// Clouds low res pass
+		// Clouds pass
 		volClouds.PerformCloudsPass(renderer, cmdBuffer);
-		// Clouds reprojection pass
-		volClouds.PerformCloudsReprojectionPass(renderer, cmdBuffer);
 
 		// OFFSCREEN
 		viewport.width = (float)surfaceExtent.width;
@@ -642,7 +636,7 @@ int main()
 		frameData.cloudStartHeight = volCloudsData.cloudStartHeight;
 		frameData.cloudLayerThickness = volCloudsData.cloudLayerThickness;
 		frameData.cloudLayerTopHeight = volCloudsData.cloudLayerTopHeight;
-		frameData.timeScale = volCloudsData.timeScale;
+		frameData.timeScale = 0.0f;
 		frameData.hgForward = volCloudsData.hgForward;
 		frameData.densityMult = volCloudsData.densityMult;
 		frameData.detailScale = volCloudsData.detailScale;

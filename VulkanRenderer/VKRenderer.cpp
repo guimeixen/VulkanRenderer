@@ -101,7 +101,7 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 
 	VkDescriptorPoolCreateInfo descPoolInfo = {};
 	descPoolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-	descPoolInfo.maxSets = 11;
+	descPoolInfo.maxSets = 15;
 	descPoolInfo.poolSizeCount = 5;
 	descPoolInfo.pPoolSizes = poolSizes;
 

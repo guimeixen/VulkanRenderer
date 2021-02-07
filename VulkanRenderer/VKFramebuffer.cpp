@@ -11,7 +11,7 @@ VKFramebuffer::VKFramebuffer()
     renderPass = VK_NULL_HANDLE;
 }
 
-bool VKFramebuffer::Create(const VKBase &base, const FramebufferParams& params, unsigned int width, unsigned int height)
+bool VKFramebuffer::Create(VKBase &base, const FramebufferParams& params, unsigned int width, unsigned int height)
 {
 	this->width = width;
 	this->height = height;

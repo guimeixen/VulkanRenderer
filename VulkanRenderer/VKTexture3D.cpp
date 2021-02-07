@@ -110,6 +110,8 @@ bool VKTexture3D::CreateFromData(VKBase& base, const TextureParams &params, unsi
 		return false;
 	if (!CreateSampler(device))
 		return false;
+
+	return true;
 }
 
 void VKTexture3D::Dispose(VkDevice device)

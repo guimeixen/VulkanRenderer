@@ -14,7 +14,7 @@ public:
 	bool LoadCubemapFromFiles(VKBase& base, const std::vector<std::string>& facesPath, const TextureParams& textureParams);
 	bool CreateDepthTexture(const VKBase &base, const TextureParams& textureParams, unsigned int width, unsigned int height, bool sampled);
 	// Right now the function assumes the color texture will be sampled
-	bool CreateColorTexture(const VKBase& base, const TextureParams& textureParams, unsigned int width, unsigned int height);
+	bool CreateColorTexture(VKBase& base, const TextureParams& textureParams, unsigned int width, unsigned int height);
 	bool CreateWithData(VKBase& base, const TextureParams& textureParams, unsigned int width, unsigned int height, const void* data);
 	void Dispose(VkDevice device);
 
