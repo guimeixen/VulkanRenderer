@@ -75,9 +75,10 @@ bool ParticleManager::Init(VKRenderer* renderer, VkRenderPass renderPass)
 	// Don't write depth
 	pipeInfo.depthStencilState.depthWriteEnable = VK_FALSE;
 
-	shader.LoadShader(base.GetDevice(), "Data/Shaders/particle_vert.spv", "Data/Shaders/particle_frag.spv");
+	vertexShader.LoadShader(base.GetDevice(), "particle", VK_SHADER_STAGE_VERTEX_BIT);
+	fragmentShader.LoadShader(base.GetDevice(), "particle", VK_SHADER_STAGE_FRAGMENT_BIT);
 
-	if (!pipeline.Create(base.GetDevice(), pipeInfo, renderer->GetPipelineLayout(), shader, renderPass))
+	if (!pipeline.Create(base.GetDevice(), pipeInfo, renderer->GetPipelineLayout(), vertexShader, fragmentShader, renderPass))
 	{
 		std::cout << "Failed to create particle system pipeline\n";
 		return false;
@@ -131,6 +132,7 @@ void ParticleManager::Dispose(VkDevice device)
 		particleSystems[i].Dispose(device);
 	}
 
-	shader.Dispose(device);
+	vertexShader.Dispose(device);
+	fragmentShader.Dispose(device);
 	pipeline.Dispose(device);
 }

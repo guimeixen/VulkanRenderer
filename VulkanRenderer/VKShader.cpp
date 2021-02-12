@@ -1,135 +1,119 @@
 #include "VKShader.h"
 
+#include "Log.h"
+
 #include <fstream>
 #include <iostream>
 #include <vector>
+#include <filesystem>
 
 VKShader::VKShader()
 {
-    vertexModule = VK_NULL_HANDLE;
-    fragmentModule = VK_NULL_HANDLE;
-    computeModule = VK_NULL_HANDLE;
-    vertexStageInfo = {};
-    fragmentStageInfo = {};
-    computeStageInfo = {};
+    shaderModule = VK_NULL_HANDLE;
+    stageInfo = {};
+    compiled = false;
+    compiledShaderFileExists = false;
+    shaderNeedsCompile = false;
 }
 
-bool VKShader::LoadShader(VkDevice device, const std::string &vertexPath, const std::string &fragmentPath)
+bool VKShader::LoadShader(VkDevice device, const std::string& shaderName, VkShaderStageFlagBits shaderStage)
 {
-    std::ifstream vertexFile(vertexPath, std::ios::ate | std::ios::binary);
-    std::ifstream fragmentFile(fragmentPath, std::ios::ate | std::ios::binary);
+    std::string baseShaderPath = "Data/Shaders/" + shaderName;
+    std::string compiledShaderPath = "Data/Shaders/spirv/" + shaderName;
 
-    if (!vertexFile.is_open())
+    if (shaderStage == VK_SHADER_STAGE_VERTEX_BIT)
     {
-        std::cout << "Failed to open vertex file: " << vertexPath << '\n';
+        baseShaderPath += ".vert";
+        compiledShaderPath += "_vert.spv";
+    }
+    else if (shaderStage == VK_SHADER_STAGE_FRAGMENT_BIT)
+    {
+        baseShaderPath += ".frag";
+        compiledShaderPath += "_frag.spv";
+    }
+    else if (shaderStage == VK_SHADER_STAGE_COMPUTE_BIT)
+    {
+        baseShaderPath += ".comp";
+        compiledShaderPath += "_comp.spv";
+    }
+
+    compiledShaderFileExists = std::filesystem::exists(compiledShaderPath);
+
+    if (compiledShaderFileExists)
+    {
+        auto compiledTime = std::filesystem::last_write_time(compiledShaderPath);
+        auto baseShaderWriteTime = std::filesystem::last_write_time(baseShaderPath);
+
+        // If the compiled time is older than when the base shader was modified the we need to compile it again
+        if (compiledTime < baseShaderWriteTime)
+            shaderNeedsCompile = true;
+    }
+
+    if (compiledShaderFileExists == false || shaderNeedsCompile)
+    {
+        // Compile the shader
+        std::string command = "glslc.exe ";
+        command += baseShaderPath;
+        command += " -o " + compiledShaderPath;
+
+        if (std::system(command.c_str()) != 0)
+        {
+            Log::Print(LogLevel::LEVEL_ERROR, "Failed to compile shader\n");
+            return false;
+        }
+        else
+        {
+            Log::Print(LogLevel::LEVEL_INFO, "Compiled shader %s\n", baseShaderPath.c_str());
+        }
+    }
+
+    std::ifstream file(compiledShaderPath, std::ios::ate | std::ios::binary);
+
+    if (!file.is_open())
+    {
+        std::cout << "Failed to open compiled shader file: " << compiledShaderPath << '\n';
         return false;
     }
-    if (!fragmentFile.is_open())
-    {
-        std::cout << "Failed to open fragment file: " << fragmentPath << '\n';
-        return false;
-    }
 
-    size_t fileSize = (size_t)vertexFile.tellg();
-    std::vector<char> vertexData(fileSize);
-    vertexFile.seekg(0);
-    vertexFile.read(vertexData.data(), fileSize);
-    vertexFile.close();
+    size_t fileSize = (size_t)file.tellg();
+    std::vector<char> shaderData(fileSize);
+    file.seekg(0);
+    file.read(shaderData.data(), fileSize);
+    file.close();
 
-    fileSize = (size_t)fragmentFile.tellg();
-    std::vector<char> fragmentData(fileSize);
-    fragmentFile.seekg(0);
-    fragmentFile.read(fragmentData.data(), fileSize);
-    fragmentFile.close();
+    VkShaderModuleCreateInfo createInfo = {};
+    createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+    createInfo.codeSize = shaderData.size();
+    createInfo.pCode = reinterpret_cast<const uint32_t*>(shaderData.data());
 
-    VkShaderModuleCreateInfo vertexCreateInfo = {};
-    vertexCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    vertexCreateInfo.codeSize = vertexData.size();
-    vertexCreateInfo.pCode = reinterpret_cast<const uint32_t*>(vertexData.data());
-
-    VkShaderModuleCreateInfo fragmentCreateInfo = {};
-    fragmentCreateInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    fragmentCreateInfo.codeSize = fragmentData.size();
-    fragmentCreateInfo.pCode = reinterpret_cast<const uint32_t*>(fragmentData.data());
-
-    if (vkCreateShaderModule(device, &vertexCreateInfo, nullptr, &vertexModule) != VK_SUCCESS)
+    if (vkCreateShaderModule(device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
     {
         std::cout << "Failed to create vertex shader module\n";
         return false;
     }
 
-    if (vkCreateShaderModule(device, &fragmentCreateInfo, nullptr, &fragmentModule) != VK_SUCCESS)
-    {
-        std::cout << "Failed to create fragment shader module\n";
-        return false;
-    }
+    stageInfo = {};
+    stageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stageInfo.stage = shaderStage;
+    stageInfo.module = shaderModule;
+    stageInfo.pName = "main";
 
-    vertexStageInfo = {};
-    vertexStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    vertexStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
-    vertexStageInfo.module = vertexModule;
-    vertexStageInfo.pName = "main";
-
-    fragmentStageInfo = {};
-    fragmentStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    fragmentStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-    fragmentStageInfo.module = fragmentModule;
-    fragmentStageInfo.pName = "main";
-
-    std::cout << "Loaded shaders:\nvertex: " << vertexPath << "\nfragment: " << fragmentPath << '\n';
-
-    return true;
-}
-
-bool VKShader::LoadShader(VkDevice device, const std::string& computePath)
-{
-    std::ifstream computeFile(computePath, std::ios::ate | std::ios::binary);
-
-    if (!computeFile.is_open())
-    {
-        std::cout << "Failed to open compute shader file: " << computePath << '\n';
-        return false;
-    }
-    size_t fileSize = (size_t)computeFile.tellg();
-    std::vector<char> computeData(fileSize);
-    computeFile.seekg(0);
-    computeFile.read(computeData.data(), fileSize);
-    computeFile.close();
-
-    VkShaderModuleCreateInfo info = {};
-    info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
-    info.codeSize = computeData.size();
-    info.pCode = reinterpret_cast<const uint32_t*>(computeData.data());
-
-    if (vkCreateShaderModule(device, &info, nullptr, &computeModule) != VK_SUCCESS)
-    {
-        std::cout << "Failed to create compute shader module\n";
-        return false;
-    }
-
-    computeStageInfo = {};
-    computeStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-    computeStageInfo.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-    computeStageInfo.module = computeModule;
-    computeStageInfo.pName = "main";
-
-    std::cout << "Loaded shaders:\ncompute: " << computePath << '\n';
+    std::cout << "Loaded shader: " << baseShaderPath << '\n';
 
     return true;
 }
 
 void VKShader::Dispose(VkDevice device)
 {
-    if (vertexModule != VK_NULL_HANDLE)
+    if (shaderModule != VK_NULL_HANDLE)
     {
-        vkDestroyShaderModule(device, vertexModule, nullptr);
+        vkDestroyShaderModule(device, shaderModule, nullptr);
     }
-    if (fragmentModule != VK_NULL_HANDLE)
-    {
-        vkDestroyShaderModule(device, fragmentModule, nullptr);
-    }
-    if (computeModule != VK_NULL_HANDLE)
-    {
-        vkDestroyShaderModule(device, computeModule, nullptr);
-    }
+}
+
+bool VKShader::Compile(const std::string &baseShaderPath, const std::string& compiledShaderPath, VkShaderStageFlagBits stage)
+{
+   
+
+    return true;
 }

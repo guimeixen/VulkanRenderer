@@ -84,7 +84,8 @@ int main()
 	shadowFB.Create(base, shadowFBParams, 1024, 1024);
 
 	VolumetricClouds volClouds;
-	volClouds.Init(renderer);
+	if (!volClouds.Init(renderer))
+		return 1;
 
 
 	ModelManager modelManager;
@@ -189,7 +190,7 @@ int main()
 	Mesh postQuadMesh = {};
 	postQuadMesh.vertexCount = 3;
 	Material postQuadMat;
-	postQuadMat.Create(renderer, postQuadMesh, postQuadMatFeatures, "Data/Shaders/post_quad_vert.spv", "Data/Shaders/post_quad_frag.spv", renderer->GetDefaultRenderPass());
+	postQuadMat.Create(renderer, postQuadMesh, postQuadMatFeatures, "post_quad", "post_quad", renderer->GetDefaultRenderPass());
 
 	// SHADOW MAPPING
 
@@ -227,7 +228,7 @@ int main()
 	shadowMatFeatures.cullMode = VK_CULL_MODE_BACK_BIT;
 	shadowMatFeatures.enableDepthWrite = VK_TRUE;
 	Material shadowMat;
-	shadowMat.Create(renderer, shadowMesh, shadowMatFeatures, "Data/Shaders/shadow_vert.spv", "Data/Shaders/shadow_frag.spv", shadowFB.GetRenderPass());
+	shadowMat.Create(renderer, shadowMesh, shadowMatFeatures, "shadow", "shadow", shadowFB.GetRenderPass());
 
 
 	VkDescriptorSet quadSet = renderer->AllocateUserTextureDescriptorSet();
@@ -235,7 +236,7 @@ int main()
 
 	// Compute
 	ComputeMaterial computeMat;
-	computeMat.Create(renderer, "Data/Shaders/compute.spv");
+	computeMat.Create(renderer, "compute");
 	
 	VkDescriptorSet computeSet = renderer->AllocateSetFromLayout(computeMat.GetSetLayout());
 
@@ -411,7 +412,7 @@ int main()
 
 	Mesh quadMesh = MeshDefaults::CreateQuad(renderer);
 	Material quadMat;
-	quadMat.Create(renderer, quadMesh, quadMatFeatures, "Data/Shaders/quad_vert.spv", "Data/Shaders/quad_frag.spv", offscreenFB.GetRenderPass());
+	quadMat.Create(renderer, quadMesh, quadMatFeatures, "quad", "quad", offscreenFB.GetRenderPass());
 
 	// Create mipmaps
 

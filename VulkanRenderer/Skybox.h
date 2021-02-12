@@ -19,7 +19,8 @@ private:
 	VKTexture2D cubeMap;
 	VKBuffer vb;
 	VkDescriptorSet set;
-	VKShader shader;
+	VKShader vertexShader;
+	VKShader fragmentShader;
 	VKPipeline pipeline;
 };
 

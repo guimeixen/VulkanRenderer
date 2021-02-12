@@ -19,7 +19,7 @@ class VKPipeline
 public:
 	VKPipeline();
 	
-	bool Create(VkDevice device, const PipelineInfo& info, VkPipelineLayout pipelineLayout, const VKShader &shader, VkRenderPass renderPass);
+	bool Create(VkDevice device, const PipelineInfo& info, VkPipelineLayout pipelineLayout, const VKShader& vertexShader, const VKShader& fragmentShader, VkRenderPass renderPass);
 	void Dispose(VkDevice device);
 
 	VkPipeline GetPipeline() const { return pipeline; }

@@ -41,13 +41,13 @@ bool ComputeMaterial::Create(VKRenderer* renderer, const std::string& computePat
 		return false;
 	}
 
-	if (!shader.LoadShader(device, "Data/Shaders/compute.spv"))
+	if (!shader.LoadShader(device, computePath, VK_SHADER_STAGE_COMPUTE_BIT))
 	{
 		std::cout << "Failed to create compute shader\n";
 		return false;
 	}
 
-	VkPipelineShaderStageCreateInfo computeStageInfo = shader.GetComputeStageInfo();
+	VkPipelineShaderStageCreateInfo computeStageInfo = shader.GetStageInfo();
 
 	VkComputePipelineCreateInfo computePipeInfo = {};
 	computePipeInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;

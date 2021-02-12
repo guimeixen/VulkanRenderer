@@ -17,7 +17,8 @@ public:
 	const std::vector<ParticleSystem>& GetParticlesystems() const { return particleSystems; }
 
 private:
-	VKShader shader;
+	VKShader vertexShader;
+	VKShader fragmentShader;
 	VKPipeline pipeline;
 
 	std::vector<ParticleSystem> particleSystems;

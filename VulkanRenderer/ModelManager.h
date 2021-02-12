@@ -47,7 +47,8 @@ private:
 
 	unsigned int instanceDataOffset;
 
-	VKShader shader;
+	VKShader vertexShader;
+	VKShader fragmentShader;
 	VKPipeline pipeline;
 };
 

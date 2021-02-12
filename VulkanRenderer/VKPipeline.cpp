@@ -7,9 +7,9 @@ VKPipeline::VKPipeline()
 	pipeline = VK_NULL_HANDLE;
 }
 
-bool VKPipeline::Create(VkDevice device, const PipelineInfo& info, VkPipelineLayout pipelineLayout, const VKShader& shader, VkRenderPass renderPass)
+bool VKPipeline::Create(VkDevice device, const PipelineInfo& info, VkPipelineLayout pipelineLayout, const VKShader& vertexShader, const VKShader& fragmentShader, VkRenderPass renderPass)
 {
-	VkPipelineShaderStageCreateInfo shaderStages[] = { shader.GetVertexStageInfo(), shader.GetFragmentStageInfo() };
+	VkPipelineShaderStageCreateInfo shaderStages[] = { vertexShader.GetStageInfo(), fragmentShader.GetStageInfo() };
 
 	VkGraphicsPipelineCreateInfo pipelineInfo = {};
 	pipelineInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;

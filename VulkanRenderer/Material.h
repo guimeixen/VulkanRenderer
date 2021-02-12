@@ -23,7 +23,8 @@ public:
 	VkPipeline GetPipeline() const { return pipeline.GetPipeline(); }
 
 private:
-	VKShader shader;
+	VKShader vertexShader;
+	VKShader fragmentShader;
 	VKPipeline pipeline;
 };
 

@@ -162,15 +162,17 @@ bool VolumetricClouds::Init(VKRenderer* renderer)
 
 	quadMesh = MeshDefaults::CreateQuad(renderer);
 
-	cloudMat.Create(renderer, quadMesh, features, "Data/Shaders/clouds_vert.spv", "Data/Shaders/clouds_frag.spv", cloudsLowResFB.GetRenderPass());
+	cloudMat.Create(renderer, quadMesh, features, "clouds", "clouds", cloudsLowResFB.GetRenderPass());
 
 	cloudMatSet = renderer->AllocateUserTextureDescriptorSet();
 	renderer->UpdateUserTextureSet3D(cloudMatSet, baseNoiseTexture, 0);
 	renderer->UpdateUserTextureSet3D(cloudMatSet, highFreqNoiseTexture, 1);
 	renderer->UpdateUserTextureSet2D(cloudMatSet, weatherTexture, 2);
 
-	cloudReprojectionMat.Create(renderer, quadMesh, features, "Data/Shaders/cloud_reprojection_vert.spv", "Data/Shaders/cloud_reprojection_frag.spv", cloudsReprojectionFB.GetRenderPass());
-	cloudCopyMat.Create(renderer, quadMesh, features, "Data/Shaders/cloud_reprojection_vert.spv", "Data/Shaders/cloud_copy_frag.spv", cloudCopyFB.GetRenderPass());
+	if (!cloudReprojectionMat.Create(renderer, quadMesh, features, "cloud_reprojection", "cloud_reprojection", cloudsReprojectionFB.GetRenderPass()))
+		return false;
+	if (!cloudCopyMat.Create(renderer, quadMesh, features, "cloud_reprojection", "cloud_copy", cloudCopyFB.GetRenderPass()))
+		return false;
 
 
 	cloudReprojectionSet[0] = renderer->AllocateUserTextureDescriptorSet();

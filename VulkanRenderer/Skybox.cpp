@@ -150,9 +150,10 @@ bool Skybox::Load(VKRenderer* renderer, const std::vector<std::string>& facesPat
 	// and otherwise wouldn't render if we kept using just LESS
 	pipeInfo.depthStencilState.depthCompareOp = VK_COMPARE_OP_LESS_OR_EQUAL;
 
-	shader.LoadShader(device, "Data/Shaders/skybox_vert.spv", "Data/Shaders/skybox_frag.spv");
+	vertexShader.LoadShader(device, "skybox", VK_SHADER_STAGE_VERTEX_BIT);
+	fragmentShader.LoadShader(device, "skybox", VK_SHADER_STAGE_FRAGMENT_BIT);
 
-	if (!pipeline.Create(device, pipeInfo, renderer->GetPipelineLayout(), shader, renderPass))
+	if (!pipeline.Create(device, pipeInfo, renderer->GetPipelineLayout(), vertexShader, fragmentShader, renderPass))
 		return false;
 
 	return true;
@@ -172,7 +173,8 @@ void Skybox::Render(VkCommandBuffer cmdBuffer, VkPipelineLayout pipelineLayout)
 void Skybox::Dispose(VkDevice device)
 {
 	cubeMap.Dispose(device);
-	shader.Dispose(device);
+	vertexShader.Dispose(device);
+	fragmentShader.Dispose(device);
 	pipeline.Dispose(device);
 	vb.Dispose(device);
 }

@@ -8,7 +8,10 @@ bool Material::Create(VKRenderer* renderer, const Mesh &mesh, const MaterialFeat
 {
 	VkDevice device = renderer->GetBase().GetDevice();
 
-	shader.LoadShader(device, vertexPath, fragmentPath);
+	if (!vertexShader.LoadShader(device, vertexPath, VK_SHADER_STAGE_VERTEX_BIT))
+		return false;
+	if (!fragmentShader.LoadShader(device, fragmentPath, VK_SHADER_STAGE_FRAGMENT_BIT))
+		return false;
 
 	PipelineInfo pipeInfo = VKPipeline::DefaultFillStructs();
 
@@ -59,8 +62,8 @@ bool Material::Create(VKRenderer* renderer, const Mesh &mesh, const MaterialFeat
 	pipeInfo.colorBlending.attachmentCount = 1;
 	pipeInfo.colorBlending.pAttachments = &colorBlendAttachment;
 
-	if (!pipeline.Create(device, pipeInfo, renderer->GetPipelineLayout(), shader, renderPass))
-		return 1;
+	if (!pipeline.Create(device, pipeInfo, renderer->GetPipelineLayout(), vertexShader, fragmentShader, renderPass))
+		return false;
 
 	return true;
 }
@@ -68,5 +71,6 @@ bool Material::Create(VKRenderer* renderer, const Mesh &mesh, const MaterialFeat
 void Material::Dispose(VkDevice device)
 {
 	pipeline.Dispose(device);
-	shader.Dispose(device);
+	vertexShader.Dispose(device);
+	fragmentShader.Dispose(device);
 }

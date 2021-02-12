@@ -35,6 +35,7 @@ bool ModelManager::Init(VKRenderer* renderer, VkRenderPass renderPass)
 
 
 	VKBase& base = renderer->GetBase();
+	VkDevice device = base.GetDevice();
 
 	PipelineInfo pipeInfo = VKPipeline::DefaultFillStructs();
 
@@ -67,9 +68,10 @@ bool ModelManager::Init(VKRenderer* renderer, VkRenderPass renderPass)
 	pipeInfo.dynamicState.pDynamicStates = dynamicStates;
 
 
-	shader.LoadShader(base.GetDevice(), "Data/Shaders/shader_vert.spv", "Data/Shaders/shader_frag.spv");
+	vertexShader.LoadShader(device, "shader", VK_SHADER_STAGE_VERTEX_BIT);
+	fragmentShader.LoadShader(device, "shader", VK_SHADER_STAGE_FRAGMENT_BIT);
 
-	if (!pipeline.Create(base.GetDevice(), pipeInfo, renderer->GetPipelineLayout(), shader, renderPass))
+	if (!pipeline.Create(device, pipeInfo, renderer->GetPipelineLayout(), vertexShader, fragmentShader, renderPass))
 	{
 		std::cout << "Failed to create model pipeline\n";
 		return false;
@@ -176,7 +178,8 @@ void ModelManager::Dispose(VkDevice device)
 		models[i].renderModel.texture.Dispose(device);
 	}
 
-	shader.Dispose(device);
+	vertexShader.Dispose(device);
+	fragmentShader.Dispose(device);
 	pipeline.Dispose(device);
 }
 
