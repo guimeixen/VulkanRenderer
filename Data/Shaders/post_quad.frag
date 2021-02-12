@@ -4,8 +4,8 @@ layout(location = 0) out vec4 outColor;
 
 layout(location = 0) in vec2 uv;
 
-layout(set = 2, binding = 0) uniform sampler2D tex;
-layout(set = 1, binding = 2) uniform sampler2D cloudsTexture;
+layout(set = 3, binding = 0) uniform sampler2D tex;
+layout(set = 2, binding = 2) uniform sampler2D cloudsTexture;
 
 void main()
 {
@@ -22,5 +22,5 @@ void main()
 	
 	outColor.a = 1.0;
 	
-	outColor = texture(cloudsTexture, uv);
+	//outColor = texture(cloudsTexture, uv);
 }

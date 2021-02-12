@@ -138,9 +138,6 @@ int main()
 	VKTexture2D storageTexture;
 	storageTexture.CreateWithData(base, storageTexParams, 256, 256, nullptr);
 
-	VKBuffer frameDataUBO;
-	frameDataUBO.Create(&base, sizeof(FrameUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
-
 	VKBuffer dirLightUBO;
 	dirLightUBO.Create(&base, sizeof(DirLightUBO), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
 
@@ -153,19 +150,13 @@ int main()
 	bufferInfo.offset = 0;
 	bufferInfo.range = VK_WHOLE_SIZE;
 
-	renderer->UpdateGlobalBuffersSet(bufferInfo, 1, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
-
-	bufferInfo.buffer = frameDataUBO.GetBuffer();
-	bufferInfo.offset = 0;
-	bufferInfo.range = VK_WHOLE_SIZE;
-
-	renderer->UpdateGlobalBuffersSet(bufferInfo, 2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	renderer->UpdateGlobalBuffersSet(bufferInfo, 0, VK_DESCRIPTOR_TYPE_STORAGE_BUFFER);
 
 	bufferInfo.buffer = dirLightUBO.GetBuffer();
 	bufferInfo.offset = 0;
 	bufferInfo.range = VK_WHOLE_SIZE;
 
-	renderer->UpdateGlobalBuffersSet(bufferInfo, 3, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
+	renderer->UpdateGlobalBuffersSet(bufferInfo, 2, VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER);
 
 	VkDescriptorImageInfo imageInfo = {};
 	imageInfo.imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL;
@@ -498,16 +489,18 @@ int main()
 
 		camera.Update(deltaTime, true, true);
 
-		auto curTime = std::chrono::high_resolution_clock::now();
-		float time = std::chrono::duration<float, std::chrono::seconds::period>(curTime - startTime).count();
+		//auto curTime = std::chrono::high_resolution_clock::now();
+		//float time = std::chrono::duration<float, std::chrono::seconds::period>(curTime - startTime).count();
 
 		renderer->WaitForFrameFences();
 		renderer->BeginCmdRecording();
 
 		VkCommandBuffer cmdBuffer = renderer->GetCurrentCmdBuffer();
 		VkPipelineLayout pipelineLayout = renderer->GetPipelineLayout();
+		VkDescriptorSet globalBuffersSet = renderer->GetGlobalBuffersSet();
 		VkDescriptorSet globalTexturesSet = renderer->GetGlobalTexturesSet();
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 1, 1, &globalTexturesSet, 0, nullptr);	
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, GLOBAL_BUFFER_SET_BINDING, 1, &globalBuffersSet, 0, nullptr);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, GLOBAL_TEXTURES_SET_BINDING, 1, &globalTexturesSet, 0, nullptr);	
 
 		VkViewport viewport = {};
 		viewport.x = 0.0f;
@@ -517,8 +510,8 @@ int main()
 
 		// SHADOW MAPPING
 
-		viewport.width = shadowFB.GetWidth();
-		viewport.height = shadowFB.GetHeight();
+		viewport.width = (float)shadowFB.GetWidth();
+		viewport.height = (float)shadowFB.GetHeight();
 
 		vkCmdSetViewport(cmdBuffer, 0, 1, &viewport);
 
@@ -613,7 +606,7 @@ int main()
 		renderer->BeginDefaultRenderPass();
 
 		vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, postQuadMat.GetPipeline());
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &quadSet, 0, nullptr);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, USER_TEXTURES_SET_BINDING, 1, &quadSet, 0, nullptr);
 		vkCmdDraw(cmdBuffer, (uint32_t)postQuadMesh.vertexCount, 1, 0, 0);
 
 		renderer->EndDefaultRenderPass();
@@ -651,16 +644,12 @@ int main()
 		frameData.previousFrameView = previousFrameView;
 		frameData.cloudUpdateBlockSize = volClouds.GetUpdateBlockSize();
 
+		renderer->UpdateFrameUBO(frameData);
+
 		DirLightUBO dirLightData = {};
 		dirLightData.lightSpaceMatrix[0] = lightSpaceCamera.GetProjectionMatrix() * lightSpaceCamera.GetViewMatrix();
 
-
-
-		void* mapped = frameDataUBO.Map(device, 0, VK_WHOLE_SIZE);
-		memcpy(mapped, &frameData, sizeof(FrameUBO));
-		frameDataUBO.Unmap(device);
-
-		mapped = dirLightUBO.Map(device, 0, VK_WHOLE_SIZE);
+		void* mapped = dirLightUBO.Map(device, 0, VK_WHOLE_SIZE);
 		memcpy(mapped, &dirLightData, sizeof(DirLightUBO));
 		dirLightUBO.Unmap(device);
 
@@ -721,7 +710,6 @@ int main()
 	offscreenFB.Dispose(device);
 	shadowFB.Dispose(device);
 	instanceDataBuffer.Dispose(device);
-	frameDataUBO.Dispose(device);
 	dirLightUBO.Dispose(device);
 
 	vkDestroyFence(device, computeFence, nullptr);

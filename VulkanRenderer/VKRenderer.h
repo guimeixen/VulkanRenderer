@@ -4,6 +4,12 @@
 #include "VKFramebuffer.h"
 #include "Camera.h"
 #include "VKTexture3D.h"
+#include "UniformBufferTypes.h"
+
+#define CAMERA_SET_BINDING 0
+#define GLOBAL_BUFFER_SET_BINDING 1
+#define GLOBAL_TEXTURES_SET_BINDING 2
+#define USER_TEXTURES_SET_BINDING 3
 
 struct GLFWWindow;
 
@@ -33,6 +39,7 @@ public:
 
 	void SetCamera(const Camera &camera);
 	void UpdateCameraUBO();
+	void UpdateFrameUBO(const FrameUBO &frameData);
 
 	void BeginCmdRecording();
 	void BeginDefaultRenderPass();
@@ -48,48 +55,61 @@ public:
 	VkCommandBuffer GetCurrentCmdBuffer() const { return cmdBuffers[currentFrame]; }
 	unsigned int GetCurrentFrame() const { return currentFrame; }
 	VkSemaphore GetRenderFinishedSemaphore() const { return renderFinishedSemaphores[currentFrame]; }
-	VkSemaphore GetImageAvailableSemaphore() const { return imageAvailableSemaphores[currentFrame]; }
+	VkSemaphore GetImageAvailableSemaphore() const { return presentFinishedSemaphores[currentFrame]; }
 
 	VkPipelineLayout GetPipelineLayout() const { return pipelineLayout; }
-	VkDescriptorSet GetGlobalBuffersSet() const { return globalBuffersSet; }
+	VkDescriptorSet GetGlobalBuffersSet() const { return frameResources[currentFrame].globalBuffersSet; }
 	VkDescriptorSet GetGlobalTexturesSet() const { return globalTexturesSet; }
 
 	unsigned int GetWidth() const { return width; }
 	unsigned int GetHeight() const { return height; }
 
 private:
-	bool CreateRenderPass(const VKBase& base, VkRenderPass& renderPass, VkFormat depthFormat);
-	bool CreateFramebuffers(const VKBase& base, VkRenderPass renderPass, std::vector<VkFramebuffer>& framebuffers, VkImageView depthImageView);
+	bool CreateRenderPass();
+	bool CreateFramebuffers();
 
 private:
-	const int MAX_FRAMES_IN_FLIGHT = 2;
-	const unsigned int MAX_CAMERAS = 3;
+	static const int MAX_FRAMES_IN_FLIGHT = 2;
+	const unsigned int MAX_CAMERAS = 4;
 	unsigned int currentFrame;
 	unsigned int width;
 	unsigned int height;
+
+	struct FrameResources {
+		VkDescriptorSet camerasSet;
+		VkDescriptorSet globalBuffersSet;
+	};
 
 	VKBase base;
 	VkRenderPass renderPass;
 	VKTexture2D depthTexture;
 	uint32_t imageIndex;
+
+	FrameResources frameResources[MAX_FRAMES_IN_FLIGHT];
+
 	std::vector<VkFramebuffer> framebuffers;
-	std::vector<VkSemaphore> imageAvailableSemaphores;
+	std::vector<VkSemaphore> presentFinishedSemaphores;
 	std::vector<VkSemaphore> renderFinishedSemaphores;
 	std::vector<VkFence> frameFences;
 	std::vector<VkFence> imagesInFlight;
 	std::vector<VkCommandBuffer> cmdBuffers;
 
 	VkDescriptorPool descriptorPool;
+	VkDescriptorSetLayout camerasSetLayout;
 	VkDescriptorSetLayout globalBuffersSetLayout;
 	VkDescriptorSetLayout globalTexturesSetLayout;
-	VkDescriptorSetLayout userTexturesSetLayout;	
-	VkDescriptorSet globalBuffersSet;
+	VkDescriptorSetLayout userTexturesSetLayout;
 	VkDescriptorSet globalTexturesSet;
 	VkPipelineLayout pipelineLayout;
 
 	VKBuffer cameraUBO;
 	glm::mat4* camerasData;
-	unsigned int currentCamera = 0;
-	unsigned int singleCameraUBOAlignedSize = 0;
+	unsigned int currentCamera;
+	unsigned int singleCameraUBOAlignedSize;
+	unsigned int allCamerasAlignedSize;
+
+	VKBuffer frameUBO;
+	unsigned int singleFrameUBOAlignedSize;
+	
 };
 

@@ -10,12 +10,12 @@ layout(std140, set = 0, binding = 0) uniform ViewUniforms
 	vec2 nearFarPlane;
 };
 
-layout(std140, set = 0, binding = 1) readonly buffer InstanceDataBuffer
+layout(std140, set = 1, binding = 0) readonly buffer InstanceDataBuffer
 {
 	mat4 instanceData[];
 };
 
-layout(std140, set = 0, binding = 2) uniform FrameUniforms
+layout(std140, set = 1, binding = 1) uniform FrameUniforms
 {
 	mat4 orthoProjX;
 	mat4 orthoProjY;
@@ -89,7 +89,7 @@ layout(std140, set = 0, binding = 2) uniform FrameUniforms
 	float padding;
 };
 
-layout(std140, set = 0, binding = 3) uniform DirLight
+layout(std140, set = 1, binding = 2) uniform DirLight
 {
 	mat4 lightSpaceMatrix[4];
 	vec4 dirAndIntensity;			// xyz - direction, w - intensity

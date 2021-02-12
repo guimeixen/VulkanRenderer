@@ -6,15 +6,9 @@ layout(location = 0) out vec4 color;
 layout(location = 0) in vec2 uv;
 layout(location = 1) in vec3 camRay;
 
-/*tex3D_u(0) baseNoiseTexture;
-tex3D_u(1) highFreqNoiseTexture;
-tex2D_u(2) weatherTexture;*/
-
-layout(set = 2, binding = 0) uniform sampler3D baseNoiseTexture;
-layout(set = 2, binding = 1) uniform sampler3D highFreqNoiseTexture;
-layout(set = 2, binding = 2) uniform sampler2D weatherTexture;
-
-
+layout(set = 3, binding = 0) uniform sampler3D baseNoiseTexture;
+layout(set = 3, binding = 1) uniform sampler3D highFreqNoiseTexture;
+layout(set = 3, binding = 2) uniform sampler2D weatherTexture;
 
 const vec4 stratus = vec4(0.0, 0.05, 0.1, 0.2);
 const vec2 cumulus = vec2(0.0, 0.45);

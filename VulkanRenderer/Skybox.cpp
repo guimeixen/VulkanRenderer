@@ -165,7 +165,7 @@ void Skybox::Render(VkCommandBuffer cmdBuffer, VkPipelineLayout pipelineLayout)
 
 	vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline.GetPipeline());	
 	vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
-	vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &set, 0, nullptr);
+	vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, USER_TEXTURES_SET_BINDING, 1, &set, 0, nullptr);
 	vkCmdDraw(cmdBuffer, 36, 1, 0, 0);
 }
 

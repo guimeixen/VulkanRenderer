@@ -132,6 +132,9 @@
     <ClCompile Include="VKTexture3D.cpp">
       <Filter>Source Files\VK</Filter>
     </ClCompile>
+    <ClCompile Include="Utils.cpp">
+      <Filter>Source Files\Program</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="VKBase.h">
@@ -226,6 +229,9 @@
     </ClInclude>
     <ClInclude Include="Texture.h">
       <Filter>Header Files\Graphics</Filter>
+    </ClInclude>
+    <ClInclude Include="Utils.h">
+      <Filter>Header Files\Program</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

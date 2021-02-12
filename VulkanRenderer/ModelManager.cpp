@@ -159,7 +159,7 @@ void ModelManager::Render(VkCommandBuffer cmdBuffer, VkPipelineLayout pipelineLa
 		vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
 		vkCmdBindIndexBuffer(cmdBuffer, m.GetIndexBuffer().GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
 		vkCmdPushConstants(cmdBuffer, pipelineLayout, VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(unsigned int), &instanceDataOffset);
-		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &models[i].renderModel.set, 0, nullptr);
+		vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, USER_TEXTURES_SET_BINDING, 1, &models[i].renderModel.set, 0, nullptr);
 		vkCmdDrawIndexed(cmdBuffer, static_cast<uint32_t>(m.GetIndexCount()), 1, 0, 0, 0);
 
 		instanceDataOffset += 1;

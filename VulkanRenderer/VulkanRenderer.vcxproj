@@ -164,6 +164,7 @@
     <ClCompile Include="Skybox.cpp" />
     <ClCompile Include="stb.cpp" />
     <ClCompile Include="TransformManager.cpp" />
+    <ClCompile Include="Utils.cpp" />
     <ClCompile Include="VKBase.cpp" />
     <ClCompile Include="VKBuffer.cpp" />
     <ClCompile Include="VKFramebuffer.cpp" />
@@ -196,6 +197,7 @@
     <ClInclude Include="Texture.h" />
     <ClInclude Include="TransformManager.h" />
     <ClInclude Include="UniformBufferTypes.h" />
+    <ClInclude Include="Utils.h" />
     <ClInclude Include="VertexTypes.h" />
     <ClInclude Include="VKBase.h" />
     <ClInclude Include="VKBuffer.h" />

@@ -201,7 +201,7 @@ void VolumetricClouds::Dispose(VkDevice device)
 	quadMesh.vb.Dispose(device);
 }
 
-void VolumetricClouds::PerformCloudsPass(VKRenderer *renderer, VkCommandBuffer cmdBuffer)
+void VolumetricClouds::PerformCloudsPass(VKRenderer* renderer, VkCommandBuffer cmdBuffer)
 {
 	VkViewport viewport = {};
 	viewport.maxDepth = 1.0f;
@@ -218,26 +218,28 @@ void VolumetricClouds::PerformCloudsPass(VKRenderer *renderer, VkCommandBuffer c
 
 	vertexBuffers[0] = quadMesh.vb.GetBuffer();
 
-	renderer->BeginRenderPass(cmdBuffer, cloudsLowResFB, 1, &clearValue);	
+	renderer->BeginRenderPass(cmdBuffer, cloudsLowResFB, 1, &clearValue);
 	vkCmdBindVertexBuffers(cmdBuffer, 0, 1, vertexBuffers, offsets);
 	vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, cloudMat.GetPipeline());
-	vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->GetPipelineLayout(), 2, 1, &cloudMatSet, 0, nullptr);
+	vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->GetPipelineLayout(), USER_TEXTURES_SET_BINDING, 1, &cloudMatSet, 0, nullptr);
 	vkCmdDraw(cmdBuffer, 6, 1, 0, 0);
 	vkCmdEndRenderPass(cmdBuffer);
 
 	// Wait for the copy to the previous frame texture to be complete
-	VkMemoryBarrier barrier = {};
-	barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-	/*	VkImageMemoryBarrier barrier = {};
-		barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-		barrier.oldLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-		barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-		barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-		barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
-		barrier.subresourceRange.layerCount = 1;
-		barrier.subresourceRange.levelCount = 1;
-		barrier.image = previousFrameTexture[(currentFrame + 1) % 2].GetImage();*/
+	//VkMemoryBarrier barrier = {};
+	//barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+	//barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	//barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	/*VkImageMemoryBarrier barrier = {};
+	barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+	barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+	barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+	barrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+	barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+	barrier.subresourceRange.layerCount = 1;
+	barrier.subresourceRange.levelCount = 1;
+	barrier.image = cloudCopyFB.GetFirstColorTexture().GetImage();*/
 
 	/*barrier.srcAccessMask = VK_ACCESS_INDIRECT_COMMAND_READ_BIT |
 		VK_ACCESS_INDEX_READ_BIT |
@@ -271,7 +273,7 @@ void VolumetricClouds::PerformCloudsPass(VKRenderer *renderer, VkCommandBuffer c
 		VK_ACCESS_HOST_WRITE_BIT;
 	*/
 
-	//vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, VK_PIPELINE_STAGE_ALL_COMMANDS_BIT, 0, 1, &barrier, 0, nullptr, 0, nullptr);
+	//vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
 
 	viewport.width = (float)cloudsReprojectionFB.GetWidth();
 	viewport.height = (float)cloudsReprojectionFB.GetHeight();
@@ -280,7 +282,7 @@ void VolumetricClouds::PerformCloudsPass(VKRenderer *renderer, VkCommandBuffer c
 
 	renderer->BeginRenderPass(cmdBuffer, cloudsReprojectionFB, 1, &clearValue);
 	vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, cloudReprojectionMat.GetPipeline());
-	vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->GetPipelineLayout(), 2, 1, &cloudReprojectionSet[0], 0, nullptr);
+	vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, renderer->GetPipelineLayout(), USER_TEXTURES_SET_BINDING, 1, &cloudReprojectionSet[0], 0, nullptr);
 	vkCmdDraw(cmdBuffer, 6, 1, 0, 0);
 	vkCmdEndRenderPass(cmdBuffer);
 
@@ -288,6 +290,7 @@ void VolumetricClouds::PerformCloudsPass(VKRenderer *renderer, VkCommandBuffer c
 	vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, cloudCopyMat.GetPipeline());
 	vkCmdDraw(cmdBuffer, 6, 1, 0, 0);
 	vkCmdEndRenderPass(cmdBuffer);
+
 
 	// Copy the current frame cloud texture to the previous frame texture so we can use it in the next frame
 	/*VkOffset3D blitSize;

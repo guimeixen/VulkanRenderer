@@ -124,7 +124,7 @@ void ParticleSystem::Render(VkCommandBuffer cmdBuffer, VkPipeline pipeline, VkPi
 	VkDeviceSize vbsOffsets[] = { 0,0 };
 
 	vkCmdBindVertexBuffers(cmdBuffer, 0, 2, vbs, vbsOffsets);
-	vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 2, 1, &set, 0, nullptr);
+	vkCmdBindDescriptorSets(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, USER_TEXTURES_SET_BINDING, 1, &set, 0, nullptr);
 	vkCmdBindPipeline(cmdBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipeline);
 	vkCmdDraw(cmdBuffer, 6, GetNumAliveParticles(), 0, 0);
 }
