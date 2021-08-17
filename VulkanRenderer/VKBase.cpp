@@ -655,6 +655,13 @@ bool VKBase::CreateDevice(VkSurfaceKHR surface)
 		deviceInfo.enabledLayerCount = 0;
 	}
 
+	// Ask for query reset
+	VkPhysicalDeviceHostQueryResetFeatures resetFeatures = {};
+	resetFeatures.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_HOST_QUERY_RESET_FEATURES;
+	resetFeatures.hostQueryReset = VK_TRUE;
+
+	deviceInfo.pNext = &resetFeatures;
+
 	if (vkCreateDevice(physicalDevice, &deviceInfo, nullptr, &device) != VK_NULL_HANDLE)
 	{
 		std::cout << "Failed to create Device\n";

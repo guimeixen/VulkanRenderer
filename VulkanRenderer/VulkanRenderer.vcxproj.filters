@@ -135,6 +135,12 @@
     <ClCompile Include="Utils.cpp">
       <Filter>Source Files\Program</Filter>
     </ClCompile>
+    <ClCompile Include="Water.cpp">
+      <Filter>Source Files\Graphics\Effects</Filter>
+    </ClCompile>
+    <ClCompile Include="Frustum.cpp">
+      <Filter>Source Files\Graphics</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="VKBase.h">
@@ -232,6 +238,12 @@
     </ClInclude>
     <ClInclude Include="Utils.h">
       <Filter>Header Files\Program</Filter>
+    </ClInclude>
+    <ClInclude Include="Water.h">
+      <Filter>Header Files\Graphics\Effects</Filter>
+    </ClInclude>
+    <ClInclude Include="Frustum.h">
+      <Filter>Header Files\Graphics</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>

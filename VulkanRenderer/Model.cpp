@@ -86,8 +86,8 @@ bool Model::Load(VKBase& base, const std::string& path)
 		memcpy(data, indices.data(), (size_t)indexSize);
 		vkUnmapMemory(device, indexStagingBuffer.GetBufferMemory());
 
-		vertexBuffer.Create(&base, sizeof(Vertex) * vertices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-		indexBuffer.Create(&base, sizeof(unsigned short) * indices.size(), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		vertexBuffer.Create(&base, vertices.size() * sizeof(Vertex), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+		indexBuffer.Create(&base, indices.size() * sizeof(unsigned short), VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
 
 		base.CopyBuffer(vertexStagingBuffer, vertexBuffer, vertexSize);
 		base.CopyBuffer(indexStagingBuffer, indexBuffer, indexSize);

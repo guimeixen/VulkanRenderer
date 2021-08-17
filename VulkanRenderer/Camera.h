@@ -1,6 +1,6 @@
 #pragma once
 
-#include "glm/glm.hpp"
+#include "Frustum.h"
 
 class Camera
 {
@@ -18,9 +18,13 @@ public:
 	void SetYaw(float yaw);
 	void SetMoveSpeed(float speed) { moveSpeed = speed; }
 
+	const Frustum& GetFrustum() const { return frustum; }
 	const glm::mat4& GetProjectionMatrix() const { return projectionMatrix; }
 	const glm::mat4& GetViewMatrix() const { return viewMatrix; }
 	const glm::vec3& GetPosition() const { return position; }
+	const glm::vec3& GetForward() const { return forward; }
+	const glm::vec3& GetRight() const { return right; }
+	const glm::vec3& GetUp() const { return up; }
 	float GetNearPlane() const { return nearPlane; }
 	float GetFarPlane() const { return farPlane; }
 
@@ -32,6 +36,7 @@ private:
 	void Reset() { firstMove = true; }
 
 private:
+	Frustum frustum;
 	bool firstMove;
 
 	glm::vec3 position;
@@ -39,7 +44,7 @@ private:
 	glm::mat4 viewMatrix;
 	glm::mat4 projectionMatrix;
 
-	glm::vec3 front;
+	glm::vec3 forward;
 	glm::vec3 up;
 	glm::vec3 right;
 	glm::vec3 worldUp;

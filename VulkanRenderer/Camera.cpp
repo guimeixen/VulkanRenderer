@@ -13,7 +13,7 @@ Camera::Camera()
 
 	position = glm::vec3();
 	worldUp = glm::vec3(0.0f, 1.0f, 0.0f);
-	front = glm::vec3(0.0f, 0.0f, -1.0f);
+	forward = glm::vec3(0.0f, 0.0f, -1.0f);
 	up = worldUp;
 	right = glm::vec3(1.0f, 0.0f, 0.0f);
 	
@@ -70,11 +70,11 @@ void Camera::DoMovement(float dt)
 
 	if (Input::IsKeyPressed(KEY_W))		// w
 	{
-		position += front * velocity;
+		position += forward * velocity;
 	}
 	if (Input::IsKeyPressed(KEY_S))		// s
 	{
-		position -= front * velocity;
+		position -= forward * velocity;
 	}
 	if (Input::IsKeyPressed(KEY_A))		// a
 	{
@@ -136,6 +136,7 @@ void Camera::SetProjectionMatrix(float fov, int windowWidth, int windowHeight, f
 	farPlane = far;
 
 	projectionMatrix = glm::perspective(glm::radians(fov), aspectRatio, near, far);
+	frustum.UpdateProjection(glm::radians(fov), aspectRatio, near, far);
 }
 
 void Camera::SetProjectionMatrix(float left, float right, float bottom, float top, float near, float far)
@@ -144,22 +145,26 @@ void Camera::SetProjectionMatrix(float left, float right, float bottom, float to
 	farPlane = far;
 
 	projectionMatrix = glm::orthoRH(left, right, bottom, top, near, far);
+	frustum.UpdateProjection(left, right, bottom, top, near, far);
 }
 
 void Camera::SetViewMatrix(const glm::mat4& view)
 {
 	viewMatrix = view;
+	//frustum.Update(position, position + forward, up);
 }
 
 void Camera::SetViewMatrix(const glm::vec3& pos, const glm::vec3& center, const glm::vec3& up)
 {
 	viewMatrix = glm::lookAt(pos, center, up);
+	frustum.Update(position, position + forward, up);
 }
 
 void Camera::SetPosition(const glm::vec3& pos)
 {
 	position = pos;
-	viewMatrix = glm::lookAt(position, position + front, up);
+	viewMatrix = glm::lookAt(position, position + forward, up);
+	frustum.Update(position, position + forward, up);
 }
 
 void Camera::SetYaw(float yaw)
@@ -178,9 +183,10 @@ void Camera::UpdateCameraVectors()
 {
 	glm::mat4 m = glm::eulerAngleYX(glm::radians(yaw), glm::radians(pitch));
 
-	front = glm::normalize(m[2]);
-	right = glm::normalize(glm::cross(front, glm::vec3(0.0f, 1.0f, 0.0f)));
-	up = glm::normalize(glm::cross(right, front));
+	forward = glm::normalize(m[2]);
+	right = glm::normalize(glm::cross(forward, glm::vec3(0.0f, 1.0f, 0.0f)));
+	up = glm::normalize(glm::cross(right, forward));
 
-	viewMatrix = glm::lookAt(position, position + front, up);
+	viewMatrix = glm::lookAt(position, position + forward, up);
+	frustum.Update(position, position + forward, up);
 }

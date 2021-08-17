@@ -92,6 +92,7 @@
       <ConformanceMode>true</ConformanceMode>
       <AdditionalIncludeDirectories>$(SolutionDir)include;C:\VulkanSDK\1.2.154.1\Include</AdditionalIncludeDirectories>
       <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
@@ -151,6 +152,7 @@
     <ClCompile Include="Camera.cpp" />
     <ClCompile Include="ComputeMaterial.cpp" />
     <ClCompile Include="EntityManager.cpp" />
+    <ClCompile Include="Frustum.cpp" />
     <ClCompile Include="Input.cpp" />
     <ClCompile Include="Log.cpp" />
     <ClCompile Include="main.cpp" />
@@ -176,6 +178,7 @@
     <ClCompile Include="VKTexture3D.cpp" />
     <ClCompile Include="VKUtils.cpp" />
     <ClCompile Include="VolumetricClouds.cpp" />
+    <ClCompile Include="Water.cpp" />
     <ClCompile Include="Window.cpp" />
   </ItemGroup>
   <ItemGroup>
@@ -183,6 +186,7 @@
     <ClInclude Include="Camera.h" />
     <ClInclude Include="ComputeMaterial.h" />
     <ClInclude Include="EntityManager.h" />
+    <ClInclude Include="Frustum.h" />
     <ClInclude Include="Input.h" />
     <ClInclude Include="Log.h" />
     <ClInclude Include="Material.h" />
@@ -210,6 +214,7 @@
     <ClInclude Include="VKTexture3D.h" />
     <ClInclude Include="VKUtils.h" />
     <ClInclude Include="VolumetricClouds.h" />
+    <ClInclude Include="Water.h" />
     <ClInclude Include="Window.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

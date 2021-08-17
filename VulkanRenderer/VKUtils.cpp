@@ -305,7 +305,7 @@ namespace vkutils
 			{
 				return availablePresentMode;
 			}
-			else if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR)		// Some drivers don't support FIFO so we should prefer Immediate if Mailbox is not available
+			else if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR)
 			{
 				bestMode = availablePresentMode;
 			}

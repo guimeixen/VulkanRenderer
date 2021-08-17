@@ -281,7 +281,7 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 	setAllocInfo.pSetLayouts = &globalTexturesSetLayout;
 	if (vkAllocateDescriptorSets(device, &setAllocInfo, &globalTexturesSet) != VK_SUCCESS)
 	{
-		std::cout << "failed to allocate descriptor sets\n";
+		std::cout << "Failed to allocate descriptor sets\n";
 		return 1;
 	}
 
@@ -343,6 +343,17 @@ bool VKRenderer::Init(GLFWwindow *window, unsigned int width, unsigned int heigh
 		vkUpdateDescriptorSets(device, 1, &write, 0, nullptr);
 	}
 
+	VkQueryPoolCreateInfo queryPoolInfo = {};
+	queryPoolInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+	queryPoolInfo.queryCount = 2 * MAX_FRAMES_IN_FLIGHT;
+	queryPoolInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+
+	if (vkCreateQueryPool(device, &queryPoolInfo, nullptr, &queryPool) != VK_SUCCESS)
+	{
+		std::cout << "Failed to created query pool!\n";
+		return false;
+	}
+
 	return true;
 }
 
@@ -363,6 +374,7 @@ void VKRenderer::Dispose()
 	vkDestroyDescriptorSetLayout(device, userTexturesSetLayout, nullptr);
 	vkDestroyDescriptorPool(device, descriptorPool, nullptr);
 	vkDestroyPipelineLayout(device, pipelineLayout, nullptr);
+	vkDestroyQueryPool(device, queryPool, nullptr);
 
 	for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
 	{
@@ -490,7 +502,25 @@ void VKRenderer::Present(VkSemaphore graphicsSemaphore, VkSemaphore computeSemap
 		CreateFramebuffers();
 	}
 
+	uint64_t data[2];
+	VkResult result = vkGetQueryPoolResults(device, queryPool, currentFrame * MAX_FRAMES_IN_FLIGHT, 2, sizeof(uint64_t) * 2, data, sizeof(uint64_t), VK_QUERY_RESULT_64_BIT);
+
+	if (result == VK_SUCCESS)
+	{
+		float frameTime = (data[1] - data[0]) * base.GetPhysicalDeviceLimits().timestampPeriod / 1000000.0f;
+		std::cout << "Frame time: " << frameTime << "ms\n";
+	}
+	else if (result == VK_NOT_READY)
+	{
+		//std::cout << "Failed not ready\n";
+	}
+
 	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+}
+
+VkCommandBuffer VKRenderer::BeginMipMaps()
+{
+	return CreateGraphicsCommandBuffer(true);
 }
 
 void VKRenderer::CreateMipMaps(VkCommandBuffer cmdBuffer, const VKTexture2D& texture)
@@ -562,6 +592,50 @@ void VKRenderer::CreateMipMaps(VkCommandBuffer cmdBuffer, const VKTexture2D& tex
 	barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
 
 	vkCmdPipelineBarrier(cmdBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+}
+
+bool VKRenderer::EndMipMaps(VkCommandBuffer cmdBuffer)
+{
+	VkDevice device = base.GetDevice();
+
+	if (vkEndCommandBuffer(cmdBuffer) != VK_SUCCESS)
+	{
+		std::cout << "Failed to end command buffer\n";
+		return false;
+	}
+
+	VkSubmitInfo submitInfo = {};
+	submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+	submitInfo.commandBufferCount = 1;
+	submitInfo.pCommandBuffers = &cmdBuffer;
+
+	VkFence fence;
+
+	VkFenceCreateInfo fenceInfo = {};
+	fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+	fenceInfo.flags = 0;
+
+	if (vkCreateFence(device, &fenceInfo, nullptr, &fence) != VK_SUCCESS)
+	{
+		std::cout << "Failed to create fence\n";
+		return false;
+	}
+	if (vkQueueSubmit(base.GetGraphicsQueue(), 1, &submitInfo, fence) != VK_SUCCESS)
+	{
+		std::cout << "Failed to submit\n";
+		return false;
+	}
+	if (vkWaitForFences(device, 1, &fence, VK_TRUE, 100000000000) != VK_SUCCESS)
+	{
+		std::cout << "wait failed\n";
+		return false;
+	}
+
+	vkDestroyFence(device, fence, nullptr);
+
+	FreeGraphicsCommandBuffer(cmdBuffer);
+
+	return true;
 }
 
 VkDescriptorSet VKRenderer::AllocateUserTextureDescriptorSet()
@@ -799,6 +873,13 @@ void VKRenderer::BeginCmdRecording()
 	{
 		std::cout << "Failed to begin recording command buffer!\n";
 	}
+
+	vkCmdResetQueryPool(cmdBuffers[currentFrame], queryPool, currentFrame * MAX_FRAMES_IN_FLIGHT, 2);
+}
+
+void VKRenderer::BeginQuery()
+{
+	vkCmdWriteTimestamp(cmdBuffers[currentFrame], VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, queryPool, currentFrame * MAX_FRAMES_IN_FLIGHT);
 }
 
 void VKRenderer::BeginDefaultRenderPass()
@@ -838,6 +919,11 @@ void VKRenderer::BeginRenderPass(VkCommandBuffer cmdBuffer, const VKFramebuffer&
 void VKRenderer::EndDefaultRenderPass()
 {
 	vkCmdEndRenderPass(cmdBuffers[currentFrame]);
+}
+
+void VKRenderer::EndQuery()
+{
+	vkCmdWriteTimestamp(cmdBuffers[currentFrame], VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, queryPool, currentFrame * MAX_FRAMES_IN_FLIGHT + 1);
 }
 
 void VKRenderer::EndCmdRecording()

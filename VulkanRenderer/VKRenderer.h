@@ -24,7 +24,9 @@ public:
 	void AcquireNextImage();
 	void Present(VkSemaphore graphicsSemaphore, VkSemaphore computeSemaphore);
 
+	VkCommandBuffer BeginMipMaps();
 	void CreateMipMaps(VkCommandBuffer cmdBuffer, const VKTexture2D& texture);
+	bool EndMipMaps(VkCommandBuffer cmdBuffer);
 	VkDescriptorSet AllocateUserTextureDescriptorSet();
 	VkDescriptorSet AllocateSetFromLayout(VkDescriptorSetLayout layout);
 	void UpdateGlobalBuffersSet(const VkDescriptorBufferInfo& info, uint32_t binding, VkDescriptorType descriptorType);
@@ -42,9 +44,11 @@ public:
 	void UpdateFrameUBO(const FrameUBO &frameData);
 
 	void BeginCmdRecording();
+	void BeginQuery();
 	void BeginDefaultRenderPass();
 	void BeginRenderPass(VkCommandBuffer cmdBuffer, const VKFramebuffer& fb, uint32_t clearValueCount, const VkClearValue *clearValues);
 	void EndDefaultRenderPass();
+	void EndQuery();
 	void EndCmdRecording();
 	void AcquireImageBarrier(VkCommandBuffer cmdBuffer, const VKTexture2D& texture, int srcQueueFamilyIndex, int dstQueueFamilyIndex);
 	void ReleaseImageBarrier(VkCommandBuffer cmdBuffer, const VKTexture2D& texture, int srcQueueFamilyIndex, int dstQueueFamilyIndex);
@@ -84,6 +88,7 @@ private:
 	VkRenderPass renderPass;
 	VKTexture2D depthTexture;
 	uint32_t imageIndex;
+	VkQueryPool queryPool;
 
 	FrameResources frameResources[MAX_FRAMES_IN_FLIGHT];
 
